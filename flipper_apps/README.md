@@ -85,8 +85,19 @@ Send `/ping` to the bot to check that it's running. Run `source .venv/bin/activa
 ### Deploying (always on)
 On any small always-on Linux machine, such as a ~€4/month VPS (Hetzner), a Raspberry Pi or Fly.io with a volume:
 ```bash
-docker compose up -d --build
+docker compose up -d --build     # Compose v2 plugin
+docker-compose up -d --build     # older standalone Compose
 ```
+If you get `unknown shorthand flag: 'd' in -d`, your Docker has no Compose v2 plugin. Use the `docker-compose` line instead, or install the plugin (`sudo apt-get install docker-compose-plugin`).
+
+Useful commands (with `docker-compose`, the same subcommands work):
+```bash
+docker compose logs -f           # follow the bot's output
+docker compose restart           # restart, e.g. after editing .env
+git pull && docker compose up -d --build   # update to the latest code
+docker compose down              # stop
+```
+
 The image includes its own Python 3.12, so the host's Python version doesn't matter. On a Raspberry Pi it needs a 64-bit OS: `uname -m` must print `aarch64`. `./data` is mounted into the container and holds all tokens and sessions. Set `TZ` in `.env` so that "today" means your day.
 
 ---
