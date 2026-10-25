@@ -54,19 +54,40 @@ Each call runs in its own thread. If an app raises an exception, the error is re
 You don't need to set up the command menu: the gateway registers every app's command with Telegram (`setMyCommands`) each time it starts. For testing, a second bot with its own token keeps your everyday bot untouched.
 
 ## Running
+Needs **Python 3.11+**. Check with `python3 --version`, then set up a virtual environment in this folder in one of two ways.
+
+**Option A: your `python3` is already 3.11 or newer**
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+**Option B: your Python is older (for example 3.6 on Ubuntu 18.04)**
+
+Install a newer Python next to the system one with [uv](https://docs.astral.sh/uv/). It needs no `sudo`. Don't replace the system `python3`, because the OS depends on it.
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh   # then open a new terminal
+uv venv -p 3.12                                   # downloads Python 3.12 if needed
+source .venv/bin/activate
+python --version                                  # should print 3.12.x
+uv pip install -r requirements.txt
+```
+
+**Then, with either option:**
+```bash
+playwright install chromium   # browser for the Strava photo step
 cp .env.example .env          # fill in TELEGRAM_TOKEN and ALLOWED_USER_IDS (see above)
-pip install -r requirements.txt && playwright install chromium
 python -m bot
 ```
-Send `/ping` to the bot to check that it's running.
+Send `/ping` to the bot to check that it's running. Run `source .venv/bin/activate` again in every new terminal before using `python`.
 
 ### Deploying (always on)
 On any small always-on Linux machine, such as a ~€4/month VPS (Hetzner), a Raspberry Pi or Fly.io with a volume:
 ```bash
 docker compose up -d --build
 ```
-`./data` is mounted into the container and holds all tokens and sessions. Set `TZ` in `.env` so that "today" means your day.
+The image includes its own Python 3.12, so the host's Python version doesn't matter. On a Raspberry Pi it needs a 64-bit OS: `uname -m` must print `aarch64`. `./data` is mounted into the container and holds all tokens and sessions. Set `TZ` in `.env` so that "today" means your day.
 
 ---
 
