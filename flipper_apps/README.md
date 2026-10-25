@@ -8,15 +8,17 @@ The gateway talks to the official [Telegram Bot API](https://core.telegram.org/b
 |---|---|
 | `/help` | Lists the commands, or shows the usage of one: `/help garmin_to_strava` |
 | `/ping` | Example app that replies with `pong` |
-| `/garmin_to_strava` | Merges Garmin activities and uploads them to Strava with photos |
+| [`/garmin_to_strava`](apps/garmin_to_strava/README.md) | Merges Garmin activities and uploads them to Strava with photos |
+
+Each app has its own README with its usage and setup:
+- [`/garmin_to_strava`](apps/garmin_to_strava/README.md)
 
 **Setup overview**
 1. [Create the Telegram bot](#1-create-the-telegram-bot)
 2. [Install](#2-install): a Python venv, or Docker only
-3. [Connect Garmin](#3-connect-garmin), for `/garmin_to_strava`
-4. [Connect Strava](#4-connect-strava), for `/garmin_to_strava`
-5. [Try it](#5-try-it)
-6. [Deploy (always on)](#6-deploy-always-on)
+3. [Set up the apps](#3-set-up-the-apps), such as connecting accounts
+4. [Try it](#4-try-it)
+5. [Deploy (always on)](#5-deploy-always-on)
 
 ## Layout
 ```
@@ -41,7 +43,8 @@ tests/
 
    APP = MyApp()
    ```
-2. Restart the bot. The app is discovered automatically and the Telegram command menu is updated.
+2. Optionally add `apps/my_app/README.md` with its usage and setup, and link it in the lists above.
+3. Restart the bot. The app is discovered automatically and the Telegram command menu is updated.
 
 `ctx` gives each call:
 - `text`: everything after the command.
@@ -63,7 +66,7 @@ You don't need to set up the command menu: the gateway registers every app's com
 
 ## 2. Install
 All commands in this README run inside the `flipper_apps/` folder. There are two ways to install, and you can use both:
-- **Python venv**: for running and testing on your own computer. You also need it on a computer with a screen for the Strava photo login (step 4b).
+- **Python venv**: for running and testing on your own computer. Some app logins need a computer with a screen, such as the [Strava photo login](apps/garmin_to_strava/README.md#2b-photos-optional).
 - **Docker only**: for an always-on server. The image brings its own Python 3.12, so the server's Python version doesn't matter.
 
 ### Python venv
@@ -121,69 +124,21 @@ Each setup command below has a Docker form, `dc run --rm bot <command>`. It runs
 ```bash
 cp .env.example .env     # skip if you already did this above
 ```
-Fill in `TELEGRAM_TOKEN` and `ALLOWED_USER_IDS` from step 1, and `TZ` (for example `Europe/Berlin`) so that "today" means your day. The Strava keys come in step 4.
+Fill in `TELEGRAM_TOKEN` and `ALLOWED_USER_IDS` from step 1, and `TZ` (for example `Europe/Berlin`) so that "today" means your day. App-specific settings are described in each app's README.
 
-## 3. Connect Garmin
-Garmin has no public API for personal accounts, so the bot logs in as you once and keeps the login token. It lasts about a year. The token, like everything the app stores, is kept in `data/garmin_to_strava/`.
+## 3. Set up the apps
+Some apps need one-time setup, such as connecting an account. Follow each app's README:
+- [`/garmin_to_strava`](apps/garmin_to_strava/README.md#setup): connect Garmin and Strava.
 
-```bash
-python -m apps.garmin_to_strava.cli auth-garmin    # Python venv
-dc run --rm bot python -m apps.garmin_to_strava.cli auth-garmin   # Docker
-```
-Enter your Garmin email and password when asked, and the MFA code if your account uses one. Then check that the token was saved:
-```bash
-ls data/garmin_to_strava/garmin_tokens/     # should list garmin_tokens.json
-```
-
-**Optional:** put `GARMIN_EMAIL` and `GARMIN_PASSWORD` in `.env`. The bot then logs in again by itself when the token expires. This doesn't work if your account uses MFA; in that case just repeat the command above.
-
-**Troubleshooting:** "Garmin isn't connected yet" or "Username and password are required" means the bot found no token. Usually the command wasn't run, or it was run from a different folder than `flipper_apps/`. Run it again from `flipper_apps/`.
-
-## 4. Connect Strava
-### 4a. API access (uploads)
-1. Go to <https://www.strava.com/settings/api> and create an API application:
-   - **Application Name**: anything, for example "Flipper Apps".
-   - **Category**: for example "Data Importer".
-   - **Website**: anything, for example `http://localhost`.
-   - **Authorization Callback Domain**: `localhost`.
-2. Copy **Client ID** and **Client Secret** into `.env` as `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET`.
-3. Authorize the app for your account:
-   ```bash
-   python -m apps.garmin_to_strava.cli auth-strava    # Python venv
-   dc run --rm bot python -m apps.garmin_to_strava.cli auth-strava   # Docker
-   ```
-   Open the printed URL in any browser and click **Authorize**. You end up on a `http://localhost/exchange_token?…&code=…` page that fails to load. That's expected: copy the whole URL from the address bar and paste it into the terminal.
-4. Check that `data/garmin_to_strava/strava_tokens.json` now exists.
-
-### 4b. Photos (optional)
-The Strava API can't upload photos, so the bot adds them through the strava.com website using a saved browser login. Creating that login opens a real browser window, so it needs a computer with a screen. It won't work inside Docker or over SSH.
-
-On your laptop, with the Python venv from step 2:
-```bash
-python -m apps.garmin_to_strava.cli auth-web     # log in to strava.com in the window that opens
-```
-If the bot runs on another machine, copy the saved login there:
-```bash
-scp data/garmin_to_strava/strava_web_state.json <user>@<server>:<path>/flipper_apps/data/garmin_to_strava/
-```
-Without this step, uploads still work, and the bot tells you to add photos in the Strava app.
-
-**Also turn off Garmin → Strava auto-sync** in Garmin Connect. Otherwise each activity is already on Strava separately, and the API can't delete those copies. The bot lists any overlapping Strava activities so you can delete them by hand.
-
-## 5. Try it
-Do a dry run first. It fetches and merges your real Garmin activities but uploads nothing, and saves the merged GPX in `data/garmin_to_strava/`:
-```bash
-python -m apps.garmin_to_strava.cli run "dry today | Test"    # Python venv
-dc run --rm bot python -m apps.garmin_to_strava.cli run "dry today | Test"   # Docker
-```
-Then start the bot in the foreground, and send it `/ping` and `/garmin_to_strava dry today`. Press Ctrl+C to stop it.
+## 4. Try it
+Start the bot in the foreground and send it `/ping`. Then try your apps; each app's README has a "Try it" step, for example [`/garmin_to_strava`](apps/garmin_to_strava/README.md#3-try-it). Press Ctrl+C to stop the bot.
 ```bash
 python -m bot      # Python venv
 dc up              # Docker
 ```
 
-## 6. Deploy (always on)
-Run the bot with Docker on any always-on Linux machine, such as a ~€4/month VPS (Hetzner), a Raspberry Pi or Fly.io with a volume. You need the "Docker only" part of step 2 done (including the `dc` shortcut), plus steps 3–4. `./data` is mounted into the container and holds all tokens and sessions.
+## 5. Deploy (always on)
+Run the bot with Docker on any always-on Linux machine, such as a ~€4/month VPS (Hetzner), a Raspberry Pi or Fly.io with a volume. You need the "Docker only" part of step 2 done (including the `dc` shortcut), plus step 3. `./data` is mounted into the container and holds all tokens and sessions.
 
 ### Start the bot
 ```bash
@@ -230,25 +185,3 @@ docker builder prune -a    # remove the remaining build cache
 ```
 Then run `dc up -d --build` again.
 
----
-
-## `/garmin_to_strava`
-Before the first use, connect your accounts: [3. Connect Garmin](#3-connect-garmin) and [4. Connect Strava](#4-connect-strava).
-
-Send one message with your photos attached, with the command in the caption:
-```
-/garmin_to_strava today | Morning ride to the lake | Coffee stop at km 30
-```
-The bot then:
-1. finds the matching Garmin Connect activities that have GPS and downloads each as GPX,
-2. merges them into one track in time order, the same as [joewein gpxmerge](https://joewein.net/bike/gpxmerge/), with one segment per activity so the gaps count as paused time,
-3. uploads the merged track to Strava with the title and description, and sets the sport type from Garmin,
-4. adds the photos through strava.com, because the Strava API has no photo upload,
-5. reports progress in a single message that it keeps editing, ending with the activity link.
-
-**Selector** (the part before the first `|`): `today`, `yesterday`, `2026-10-24`, `last 2`, `last ride` (meaning the single most recent ride), `rides today`, `last 3 runs`, or `latest activities today`. Types are ride, run, walk, hike and swim. If you leave out the `|` separators, the first line is the selector only if it names a day or `last`; otherwise it's the title and the selector is `today`. So a one-word title like `Ride` stays a title. After the title comes the description. Start with `dry` (or `dry-run`) to get the merged GPX back without uploading.
-
-### Caveats
-- Garmin has no public personal API. This app uses the unofficial [`garminconnect`](https://github.com/cyberjunky/python-garminconnect) library, which can break when Garmin changes its login. If the token expires, repeat [step 3](#3-connect-garmin).
-- The photo step automates the Strava website, and its selectors are in `apps/garmin_to_strava/strava_web.py`. If Strava changes its page, that step fails, but the activity is still uploaded and the bot tells you to add the photos by hand. If the web login expires, repeat [step 4b](#4b-photos-optional).
-- Telegram compresses photos sent the normal way. To keep full resolution, send them "as file".
