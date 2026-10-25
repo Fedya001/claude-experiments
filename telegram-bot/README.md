@@ -1,0 +1,92 @@
+# telegram-bot
+
+A personal Telegram bot that hosts small **apps**, one command each, in the spirit of Flipper apps. It talks to the official [Telegram Bot API](https://core.telegram.org/bots/api) directly with `httpx` and long polling, so it needs no bot framework, webhook or public URL.
+
+| Command | What it does |
+|---|---|
+| `/help` | Lists the commands, or shows the usage of one: `/help garmin_to_strava` |
+| `/ping` | Example app that replies with `pong` |
+| `/garmin_to_strava` | Merges Garmin activities and uploads them to Strava with photos |
+
+## Layout
+```
+bot/        generic core: Bot API client, App base class, app discovery, polling runner
+apps/       one package per app, each exporting APP = SomeApp()
+tests/
+```
+
+## Adding an app
+1. Create `apps/my_app/__init__.py`:
+   ```python
+   from bot.app import App, Context
+
+   class MyApp(App):
+       command = "my_app"            # a-z, 0-9, _ only (Telegram rule)
+       description = "Shown in /help and in the command menu"
+       usage = "/my_app <args> — longer help"
+
+       def handle(self, ctx: Context) -> None:
+           msg = ctx.reply("working…")
+           ctx.edit(msg, f"done: {ctx.text}, {len(ctx.photos)} photos")
+
+   APP = MyApp()
+   ```
+2. Restart the bot. The app is discovered automatically and the Telegram command menu is updated.
+
+`ctx` gives each call:
+- `text`: everything after the command.
+- `photos` / `documents`: downloaded files. All photos of an album are collected into one call, and images sent "as file" count as photos.
+- `reply` / `edit` / `send_file`.
+- `data_dir`: persistent, at `data/<command>/`.
+- `work_dir`: temporary, deleted after the call.
+
+Each call runs in its own thread. If an app raises an exception, the error is reported in the chat.
+
+## Running
+```bash
+cp .env.example .env          # fill in TELEGRAM_TOKEN (from @BotFather) and ALLOWED_USER_IDS
+pip install -r requirements.txt && playwright install chromium
+python -m bot
+```
+To find your user id, message @userinfobot. The bot ignores everyone not listed in `ALLOWED_USER_IDS`.
+
+### Deploying (always on)
+On any small always-on Linux machine, such as a ~€4/month VPS (Hetzner), a Raspberry Pi or Fly.io with a volume:
+```bash
+docker compose up -d --build
+```
+`./data` is mounted into the container and holds all tokens and sessions. Set `TZ` in `.env` so that "today" means your day.
+
+---
+
+## `/garmin_to_strava`
+
+Send one message with your photos attached, with the command in the caption:
+```
+/garmin_to_strava today | Morning ride to the lake | Coffee stop at km 30
+```
+The bot then:
+1. finds the matching Garmin Connect activities that have GPS and downloads each as GPX,
+2. merges them into one track in time order, the same as [joewein gpxmerge](https://joewein.net/bike/gpxmerge/), with one segment per activity so the gaps count as paused time,
+3. uploads the merged track to Strava with the title and description, and sets the sport type from Garmin,
+4. adds the photos through strava.com, because the Strava API has no photo upload,
+5. reports progress in a single message that it keeps editing, ending with the activity link.
+
+**Selector** (the part before the first `|`): `today`, `yesterday`, `2026-10-24`, `last 2`, `rides today`, `last 3 runs`, or `latest activities today`. Types are ride, run, walk, hike and swim. If you leave out the `|` separators, the first line is the selector (or `today` if it isn't a valid one), the next line is the title and the rest is the description. Start with `dry` to get the merged GPX back without uploading.
+
+### One-time setup (on your laptop)
+```bash
+pip install -r requirements.txt && playwright install chromium
+python -m apps.garmin_to_strava.cli auth-garmin   # email, password, MFA code; caches tokens (~1 year)
+python -m apps.garmin_to_strava.cli auth-strava   # needs STRAVA_CLIENT_ID/SECRET in .env
+python -m apps.garmin_to_strava.cli auth-web      # opens a browser: log in to strava.com (for photos)
+python -m apps.garmin_to_strava.cli run "dry today | Test"   # try it without Telegram
+```
+- **Strava API app**: create one at <https://www.strava.com/settings/api> and set *Authorization Callback Domain* to `localhost`. During `auth-strava`, the browser ends up on a `localhost` page that fails to load. That's expected: copy that URL and paste it into the terminal.
+- Copy `data/garmin_to_strava/` to the server along with the code.
+- **Turn off Garmin → Strava auto-sync.** Otherwise the separate activities are already on Strava, and the API can't delete them. The bot lists any overlapping Strava activities so you can delete them by hand.
+
+### Caveats
+- Garmin has no public personal API. This app uses the unofficial [`garminconnect`](https://github.com/cyberjunky/python-garminconnect) library, which can break when Garmin changes its login. If the cached tokens expire, re-run `auth-garmin`.
+- The photo step automates the Strava website, and its selectors are in `apps/garmin_to_strava/strava_web.py`. If Strava changes its page, that step fails, but the activity is still uploaded and the bot tells you to add the photos by hand. If the web session expires, re-run `auth-web`.
+- Telegram compresses photos sent the normal way. To keep full resolution, send them "as file".
