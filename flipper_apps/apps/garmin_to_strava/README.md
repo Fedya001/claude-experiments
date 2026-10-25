@@ -14,12 +14,12 @@ The bot then:
 4. attaches your photos,
 5. reports progress in a single message that it keeps editing, ending with the activity link.
 
-**Selector** (the part before the first `|`): `today`, `yesterday`, `2026-10-24`, `last 2`, `last ride` (meaning the single most recent ride), `rides today`, `last 3 runs`, or `latest activities today`. Types are ride, run, walk, hike and swim. If you leave out the `|` separators, the first line is the selector only if it names a day or `last`; otherwise it's the title and the selector is `today`. So a one-word title like `Ride` stays a title. After the title comes the description. Start with `dry` (or `dry-run`) to get the merged GPX back without uploading.
+**Selector** (the part before the first `|`): `today`, `yesterday`, `2026-10-24`, `last 2`, `last ride` (meaning the single most recent ride), `rides today`, `last 3 runs`, or `latest activities today`. Types are ride, run, walk, hike and swim. If you leave out the `|` separators, the first line is the selector only if it names a day or `last`; otherwise it's the title and the selector is `today`. So a one-word title like `Ride` stays a title. After the title comes the description.
 
 ## Accounts and logins
 The first time a step needs an account, the bot asks for it in the chat:
 - **Garmin**, on your first call: your Garmin Connect email and password, and the verification code Garmin sends you if your account uses two-step verification.
-- **Strava**, on your first real upload (not for `dry`): your Strava email and password, and the code Strava emails you if it asks for one. If you sign in to Strava with Google or Apple, first set a Strava password in the Strava app (Settings → Account → Change password).
+- **Strava**, on your first upload: your Strava email and password, and the code Strava emails you if it asks for one. If you sign in to Strava with Google or Apple, first set a Strava password in the Strava app (Settings → Account → Change password).
 
 Your password replies are deleted from the chat right after reading. The bot never stores passwords. It keeps only the login result:
 - the Garmin login token, which lasts about a year and is renewed automatically,
@@ -38,15 +38,14 @@ Manage your logins with these commands. They only ever show or change **your own
 **Turn off Garmin → Strava auto-sync** in Garmin Connect. Otherwise each activity is also on Strava separately, and you'd have to delete those copies by hand.
 
 ## Try it
-Send `/garmin_to_strava dry today`. The bot asks for your Garmin login, then sends back the merged GPX without uploading. When that works, try a real upload with a photo attached; the bot asks for your Strava login once.
+Send `/garmin_to_strava today | Test` with a photo attached. The first time, the bot asks for your Garmin login and then your Strava login. Then it uploads the activity and replies with its link. You can rename or delete the test activity in Strava afterwards.
 
 You can also run the app in a terminal, without Telegram. It asks the same questions there and saves the logins for your Telegram user id (the first of `ALLOWED_USER_IDS`, or `--user <id>`), so the bot reuses them. Run it from the `flipper_apps/` folder:
 ```bash
-python -m apps.garmin_to_strava.cli "dry today | Test"                     # Python venv
-dc run --rm bot python -m apps.garmin_to_strava.cli "dry today | Test"     # Docker
+python -m apps.garmin_to_strava.cli "today | Test" photo.jpg                     # Python venv
+dc run --rm bot python -m apps.garmin_to_strava.cli "today | Test"                # Docker
 python -m apps.garmin_to_strava.cli accounts
 ```
-The dry run's GPX is saved in your folder under `data/garmin_to_strava/users/<id>/`.
 
 ## Caveats
 - Garmin has no public API for personal accounts. This app uses the unofficial [`garminconnect`](https://github.com/cyberjunky/python-garminconnect) library, which can break when Garmin changes its login.

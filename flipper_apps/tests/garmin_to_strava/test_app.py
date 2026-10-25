@@ -15,7 +15,7 @@ class FakeCtx(Context):
     def __init__(self, tmp_path, text, photos=(), answers=(), user_id=1):
         super().__init__(api=None, chat_id=0, user_id=user_id, text=text, photos=list(photos),
                          data_dir=tmp_path / "data", work_dir=tmp_path)
-        self.messages, self.files, self.asked = [], [], []
+        self.messages, self.asked = [], []
         self.answers = list(answers)
 
     def reply(self, text):
@@ -28,9 +28,6 @@ class FakeCtx(Context):
     def ask(self, prompt, *, secret=False, timeout=300):
         self.asked.append((prompt, secret))
         return self.answers.pop(0)
-
-    def send_file(self, path, caption=None):
-        self.files.append(path.read_text())
 
 
 def connect_garmin(user_dir):
@@ -76,14 +73,6 @@ def stubs(monkeypatch):
     monkeypatch.setattr(app_mod.strava_web, "connect", strava_connect)
     monkeypatch.setattr(app_mod.strava_web, "upload", upload)
     return calls
-
-
-def test_dry_run_needs_only_garmin(tmp_path, stubs):
-    ctx = FakeCtx(tmp_path, "dry today | Test")
-    app_mod.APP.handle(ctx)
-    assert len(ctx.files) == 1 and ctx.files[0].count("<trkseg>") == 2
-    assert stubs["garmin_connect"] == 1 and stubs["strava_connect"] == 0
-    assert stubs["uploads"] == []
 
 
 def test_first_full_run_connects_both_then_reuses(tmp_path, stubs):

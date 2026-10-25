@@ -1,7 +1,6 @@
 """Run /garmin_to_strava in a terminal, without Telegram (for testing).
 
 Run from the flipper_apps folder:
-  python -m apps.garmin_to_strava.cli "dry today | Test ride"
   python -m apps.garmin_to_strava.cli "today | Lake loop" photo1.jpg
   python -m apps.garmin_to_strava.cli accounts
   python -m apps.garmin_to_strava.cli --user 123456789 "forget all"
@@ -34,12 +33,6 @@ class ConsoleContext(Context):
 
     def ask(self, prompt: str, *, secret: bool = False, timeout: float = 300) -> str:
         return (getpass.getpass if secret else input)(prompt + " ").strip()
-
-    def send_file(self, path: Path, caption: str | None = None) -> None:
-        # data_dir is mounted from the host in Docker, unlike the working directory
-        dest = self.user_dir / path.name
-        dest.write_bytes(path.read_bytes())
-        print(f"{caption or 'File'}: saved {dest}")
 
 
 def main() -> None:

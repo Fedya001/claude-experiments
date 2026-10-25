@@ -12,12 +12,11 @@ from .parse import parse_request
 log = logging.getLogger(__name__)
 
 USAGE = """\
-/garmin_to_strava [dry] <selector> | <title> | <description>
+/garmin_to_strava <selector> | <title> | <description>
 Attach photos to the same message (put the command in the caption).
 
 Selector: today, yesterday, 2026-10-24, last 2, rides today, runs yesterday…
 Without '|': first line = selector (or 'today' if it isn't one), next line = title, rest = description.
-'dry' sends the merged GPX back instead of uploading.
 
 Example: /garmin_to_strava today | Morning ride to the lake | Coffee stop at km 30
 
@@ -151,10 +150,6 @@ class GarminToStrava(App):
         gpx_path.write_text(merged.to_xml())
         progress(f"🔗 {'Merged' if len(activities) > 1 else 'Track'}: {summary.distance_km:.1f} km, "
                  f"{fmt_duration(summary.elapsed)} elapsed, {summary.points} points")
-
-        if req.dry_run:
-            ctx.send_file(gpx_path, caption="Dry run — not uploaded")
-            return
 
         if not strava_web.is_connected(ctx.user_dir):
             ctx.reply("Now let's connect your Strava account.")

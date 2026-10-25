@@ -31,12 +31,12 @@ def test_selector_errors(text):
 def test_pipes():
     r = parse_request("yesterday | Morning ride | Coffee at km 30", TODAY)
     assert r.selector.date_from == date(2026, 10, 24)
-    assert (r.title, r.description, r.dry_run) == ("Morning ride", "Coffee at km 30", False)
+    assert (r.title, r.description) == ("Morning ride", "Coffee at km 30")
 
 
-def test_dry_and_missing_parts():
-    r = parse_request("dry today |", TODAY)
-    assert r.dry_run and r.title is None and r.description is None
+def test_missing_parts():
+    r = parse_request("today |", TODAY)
+    assert r.title is None and r.description is None
 
 
 def test_lines_with_selector_first():
@@ -60,17 +60,6 @@ def test_selector_matches_garmin_types():
     s = Selector(family="ride")
     assert s.matches_type("road_biking") and s.matches_type("gravel_cycling")
     assert not s.matches_type("running")
-
-
-@pytest.mark.parametrize("prefix", ["dry", "dry-run", "--dry-run", "DRY"])
-def test_dry_aliases(prefix):
-    r = parse_request(f"{prefix} today | T", TODAY)
-    assert r.dry_run and r.title == "T" and r.selector == Selector(TODAY, TODAY)
-
-
-def test_word_starting_with_dry_is_not_dry_run():
-    r = parse_request("Dryland loop", TODAY)
-    assert not r.dry_run and r.title == "Dryland loop"
 
 
 def test_one_word_title_that_is_a_type_stays_a_title():

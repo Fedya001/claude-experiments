@@ -1,6 +1,6 @@
 """Turns the user's text into an activity selector, a title and a description.
 
-Format:  [dry] <selector> | <title> | <description>
+Format:  <selector> | <title> | <description>
 Without '|': if the first line is a valid selector naming a day or `last` it is
 used as one (so a one-word title like "Ride" stays a title), otherwise the
 selector is 'today'; the next line is the title and the rest the description.
@@ -63,7 +63,6 @@ class Request:
     selector: Selector
     title: str | None
     description: str | None
-    dry_run: bool = False
 
 
 def _anchors_selector(text: str) -> bool:
@@ -106,9 +105,6 @@ def parse_selector(text: str, today: date) -> Selector:
 
 def parse_request(text: str, today: date) -> Request:
     text = text.strip()
-    dry = False
-    if m := re.match(r"(--dry-run|dry-run|dry)(?=\s|\||$)\s*", text, re.IGNORECASE):
-        dry, text = True, text[m.end():]
 
     if "|" in text:
         sel_text, _, rest = text.partition("|")
@@ -128,4 +124,4 @@ def parse_request(text: str, today: date) -> Request:
             selector = parse_selector("", today)
         title = lines[0] if lines else ""
         desc = "\n".join(lines[1:])
-    return Request(selector, title.strip() or None, desc.strip() or None, dry)
+    return Request(selector, title.strip() or None, desc.strip() or None)

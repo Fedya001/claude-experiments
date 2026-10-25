@@ -138,7 +138,7 @@ Nothing to do here. Apps that need an account ask for the login in the chat the 
 - Apps offer a command to forget your saved logins, for example `/garmin_to_strava forget all`.
 
 ## 4. Try it
-Start the bot in the foreground and send it `/ping`. Then try your apps, for example `/garmin_to_strava dry today` (see [its README](apps/garmin_to_strava/README.md#try-it)). Press Ctrl+C to stop the bot.
+Start the bot in the foreground and send it `/ping`. Then try your apps, for example `/garmin_to_strava today | Test` (see [its README](apps/garmin_to_strava/README.md#try-it)). Press Ctrl+C to stop the bot.
 ```bash
 python -m bot      # Python venv
 dc up              # Docker
