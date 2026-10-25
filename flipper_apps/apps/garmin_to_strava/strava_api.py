@@ -36,7 +36,8 @@ class Strava:
         self.client_id = client_id or os.getenv("STRAVA_CLIENT_ID")
         self.client_secret = client_secret or os.getenv("STRAVA_CLIENT_SECRET")
         if not self.client_id or not self.client_secret:
-            raise StravaError("set STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET")
+            raise StravaError("set STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET in .env "
+                              "(see README → 4. Connect Strava)")
         self.http = httpx.Client(timeout=60)
 
     # --- OAuth -------------------------------------------------------------
@@ -64,7 +65,9 @@ class Strava:
 
     def _access_token(self) -> str:
         if not self.token_file.exists():
-            raise StravaError("Strava is not authorized yet: run `cli auth-strava`")
+            raise StravaError("Strava isn't connected yet: run "
+                              "`python -m apps.garmin_to_strava.cli auth-strava` "
+                              "(see README → 4. Connect Strava)")
         tokens = json.loads(self.token_file.read_text())
         if tokens["expires_at"] < time.time() + 120:
             tokens = self._token_request(grant_type="refresh_token",

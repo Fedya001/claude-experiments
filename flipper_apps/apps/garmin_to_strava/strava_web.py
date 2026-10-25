@@ -39,7 +39,9 @@ def add_photos(data_dir: Path, activity_id: int, photos: list[Path], timeout_s: 
 
     state = state_file(data_dir)
     if not state.exists():
-        raise WebSessionError("no Strava web session: run `cli auth-web`")
+        raise WebSessionError("no Strava web session: run "
+                              "`python -m apps.garmin_to_strava.cli auth-web` "
+                              "(see README → 4. Connect Strava)")
     with sync_playwright() as p:
         browser = p.chromium.launch()
         context = browser.new_context(storage_state=str(state))
@@ -47,7 +49,8 @@ def add_photos(data_dir: Path, activity_id: int, photos: list[Path], timeout_s: 
         page.set_default_timeout(timeout_s * 1000)
         page.goto(f"{BASE}/activities/{activity_id}/edit")
         if "/login" in page.url or "/session" in page.url:
-            raise WebSessionError("Strava web session expired: run `cli auth-web` again")
+            raise WebSessionError("Strava web session expired: run "
+                                  "`python -m apps.garmin_to_strava.cli auth-web` again")
 
         file_input = page.locator("input[type=file]").first
         file_input.wait_for(state="attached")

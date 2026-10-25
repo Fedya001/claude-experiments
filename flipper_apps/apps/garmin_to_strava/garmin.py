@@ -33,8 +33,13 @@ def login(data_dir: Path, email: str | None = None, password: str | None = None,
     """Logs in with cached tokens; falls back to credentials (env GARMIN_EMAIL/PASSWORD)."""
     tokens = token_dir(data_dir)
     tokens.mkdir(parents=True, exist_ok=True)
-    client = Garmin(email or os.getenv("GARMIN_EMAIL"), password or os.getenv("GARMIN_PASSWORD"),
-                    prompt_mfa=prompt_mfa)
+    email = email or os.getenv("GARMIN_EMAIL")
+    password = password or os.getenv("GARMIN_PASSWORD")
+    if not (tokens / "garmin_tokens.json").exists() and not (email and password):
+        raise RuntimeError("Garmin isn't connected yet: run "
+                           "`python -m apps.garmin_to_strava.cli auth-garmin` "
+                           "(see README → 3. Connect Garmin)")
+    client = Garmin(email, password, prompt_mfa=prompt_mfa)
     client.login(str(tokens))  # saves refreshed tokens back to the directory
     return client
 

@@ -31,7 +31,8 @@ class ConsoleContext(Context):
         print("—" * 40 + "\n" + text)
 
     def send_file(self, path: Path, caption: str | None = None) -> None:
-        dest = Path.cwd() / path.name
+        # data_dir is mounted from the host in Docker, unlike the working directory
+        dest = self.data_dir / path.name
         dest.write_bytes(path.read_bytes())
         print(f"{caption or 'File'}: saved {dest}")
 
