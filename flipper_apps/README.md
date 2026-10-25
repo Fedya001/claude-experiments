@@ -44,13 +44,22 @@ tests/
 
 Each call runs in its own thread. If an app raises an exception, the error is reported in the chat.
 
+## Setting up the Telegram bot
+1. In Telegram, open [@BotFather](https://t.me/BotFather) and send `/newbot`.
+2. Choose a display name (for example "Flipper Apps") and a username that ends in `bot` (for example `my_flipper_apps_bot`).
+3. BotFather replies with a token like `123456789:AAH…`. Put it in `.env` as `TELEGRAM_TOKEN`, and keep it secret: anyone with it can control the bot. If it leaks, send `/revoke` to BotFather to get a new one.
+4. Message [@userinfobot](https://t.me/userinfobot) to get your numeric user id, and put it in `.env` as `ALLOWED_USER_IDS`. The bot ignores everyone not listed there.
+5. Open a chat with your new bot and press **Start**. Bots can't message you first.
+
+You don't need to set up the command menu: the gateway registers every app's command with Telegram (`setMyCommands`) each time it starts. For testing, a second bot with its own token keeps your everyday bot untouched.
+
 ## Running
 ```bash
-cp .env.example .env          # fill in TELEGRAM_TOKEN (from @BotFather) and ALLOWED_USER_IDS
+cp .env.example .env          # fill in TELEGRAM_TOKEN and ALLOWED_USER_IDS (see above)
 pip install -r requirements.txt && playwright install chromium
 python -m bot
 ```
-To find your user id, message @userinfobot. The bot ignores everyone not listed in `ALLOWED_USER_IDS`.
+Send `/ping` to the bot to check that it's running.
 
 ### Deploying (always on)
 On any small always-on Linux machine, such as a ~€4/month VPS (Hetzner), a Raspberry Pi or Fly.io with a volume:
