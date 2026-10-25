@@ -83,22 +83,76 @@ python -m bot
 Send `/ping` to the bot to check that it's running. Run `source .venv/bin/activate` again in every new terminal before using `python`.
 
 ### Deploying (always on)
-On any small always-on Linux machine, such as a ~€4/month VPS (Hetzner), a Raspberry Pi or Fly.io with a volume:
-```bash
-docker compose up -d --build     # Compose v2 plugin
-docker-compose up -d --build     # older standalone Compose
-```
-If you get `unknown shorthand flag: 'd' in -d`, your Docker has no Compose v2 plugin. Use the `docker-compose` line instead, or install the plugin (`sudo apt-get install docker-compose-plugin`).
+**Requirements:**
+- An always-on Linux machine, such as a ~€4/month VPS (Hetzner), a Raspberry Pi or Fly.io with a volume.
+- [Docker](https://docs.docker.com/engine/install/).
+- About 3 GB of free disk space, because the image is large (check with `df -h`).
+- On a Raspberry Pi, a 64-bit OS: `uname -m` must print `aarch64`.
 
-Useful commands (with `docker-compose`, the same subcommands work):
-```bash
-docker compose logs -f           # follow the bot's output
-docker compose restart           # restart, e.g. after editing .env
-git pull && docker compose up -d --build   # update to the latest code
-docker compose down              # stop
-```
+The image includes its own Python 3.12, so the host's Python version doesn't matter.
 
-The image includes its own Python 3.12, so the host's Python version doesn't matter. On a Raspberry Pi it needs a 64-bit OS: `uname -m` must print `aarch64`. `./data` is mounted into the container and holds all tokens and sessions. Set `TZ` in `.env` so that "today" means your day.
+#### Step 1: choose your Compose command
+Docker Compose comes in two forms, and you only need the one that works on your machine. Try them in this order:
+```bash
+docker compose version     # Compose v2 plugin (newer Docker)
+docker-compose version     # standalone Compose (older setups)
+```
+Use the first one that prints a version. Then define the `dc` shortcut that **every command below uses**:
+```bash
+alias dc='docker compose'      # if the first one worked
+alias dc='docker-compose'      # if only the second one worked
+```
+To keep the shortcut in new terminals, add the same alias line to `~/.bashrc` (or `~/.zshrc`), for example `echo "alias dc='docker-compose'" >> ~/.bashrc`.
+
+If you see `unknown shorthand flag: 'd' in -d`, you used `docker compose` but the v2 plugin isn't installed. Use `docker-compose` instead, or install the plugin with `sudo apt-get install docker-compose-plugin`.
+
+#### Step 2: start the bot
+Run these inside the `flipper_apps/` folder, after you've created `.env` and done the app logins:
+```bash
+dc up -d --build      # build the image and start it in the background
+dc logs -f            # wait for "polling; commands: …", then Ctrl+C
+```
+Then send `/ping` to the bot in Telegram.
+
+#### Everyday commands
+| Task | Command |
+|---|---|
+| Is it running? | `dc ps`: `Up` means running, `Restarting` means it keeps crashing (check the logs) |
+| Follow the logs | `dc logs -f` (Ctrl+C stops following; the bot keeps running) |
+| Last 100 log lines | `dc logs --tail 100` |
+| Stop | `dc stop`. It stays stopped, even after a reboot, until you start it again. |
+| Start again | `dc start` |
+| Restart | `dc restart` |
+| Apply changes to `.env` | `dc up -d`. A plain `restart` keeps the old settings. |
+| Update to the latest code | `git pull && dc up -d --build` |
+| Remove the container | `dc down`. Your tokens in `data/` are kept, and `dc up -d` brings it back. |
+
+#### What happens on errors
+- **An error inside one app**, such as a failed Garmin login, is reported to you in the chat. The bot keeps running.
+- **Network or Telegram outages** don't stop the bot. It waits and retries on its own.
+- **If the bot process itself dies**, for example from a bad config or running out of memory, Docker starts it again automatically. That's because of `restart: unless-stopped` in `docker-compose.yml`. If it keeps crashing, Docker waits longer between attempts.
+- **A config mistake**, such as an empty `TELEGRAM_TOKEN`, makes it crash on every start. `dc ps` then shows `Restarting`, and `dc logs --tail 20` shows the reason. Fix `.env`, then run `dc up -d`.
+- **A bot you stopped yourself** with `dc stop` is never restarted automatically.
+
+#### Starting automatically after a server reboot
+The container comes back after a reboot as long as the Docker service itself starts at boot. Enable that once:
+```bash
+sudo systemctl enable docker
+systemctl is-enabled docker     # should print "enabled"
+```
+To test it, run `sudo reboot`, then `dc ps` after the machine is back. If you stopped the bot with `dc stop` before the reboot, it stays stopped.
+
+#### Troubleshooting: `no space left on device`
+The build needs several GB of temporary space. Check what's using it and remove unused Docker data:
+```bash
+df -h                      # free space per disk
+docker system df           # space used by Docker
+docker system prune -a     # remove unused images, stopped containers, build cache
+docker builder prune -a    # remove the remaining build cache
+```
+Then run `dc up -d --build` again.
+
+`./data` is mounted into the container and holds all tokens and sessions. Set `TZ` in `.env` so that "today" means your day.
 
 ---
 
