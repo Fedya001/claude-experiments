@@ -1,6 +1,6 @@
 """One-time setup and local testing without Telegram.
 
-Run from the telegram-bot folder:
+Run from the flipper_apps folder:
   python -m apps.garmin_to_strava.cli auth-garmin
   python -m apps.garmin_to_strava.cli auth-strava
   python -m apps.garmin_to_strava.cli auth-web

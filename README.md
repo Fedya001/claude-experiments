@@ -1,4 +1,4 @@
 # claude-experiments
 Experiments with Claude
 
-- [`telegram-bot/`](telegram-bot/): a personal Telegram bot with pluggable apps, including `/garmin_to_strava`, which merges Garmin activities and uploads them to Strava with photos.
+- [`flipper_apps/`](flipper_apps/): your own apps, reachable through a Telegram bot gateway. It includes `/garmin_to_strava`, which merges Garmin activities and uploads them to Strava with photos.

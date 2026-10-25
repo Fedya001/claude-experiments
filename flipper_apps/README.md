@@ -1,6 +1,8 @@
-# telegram-bot
+# flipper_apps
 
-A personal Telegram bot that hosts small **apps**, one command each, in the spirit of Flipper apps. It talks to the official [Telegram Bot API](https://core.telegram.org/bots/api) directly with `httpx` and long polling, so it needs no bot framework, webhook or public URL.
+A collection of small apps you write yourself, in the spirit of Flipper Zero apps, all reachable from one **Telegram bot**. The bot is the gateway: each app is one command, and the bot routes `/command` messages to it, along with any text and photos. Adding an app means dropping a folder into `apps/`.
+
+The gateway talks to the official [Telegram Bot API](https://core.telegram.org/bots/api) directly with `httpx` and long polling, so it needs no bot framework, webhook or public URL.
 
 | Command | What it does |
 |---|---|
@@ -10,8 +12,8 @@ A personal Telegram bot that hosts small **apps**, one command each, in the spir
 
 ## Layout
 ```
-bot/        generic core: Bot API client, App base class, app discovery, polling runner
-apps/       one package per app, each exporting APP = SomeApp()
+bot/        the Telegram gateway: Bot API client, App base class, app discovery, polling runner
+apps/       your apps, one package each, exporting APP = SomeApp()
 tests/
 ```
 
