@@ -50,7 +50,9 @@ tests/
 - `text`: everything after the command.
 - `photos` / `documents`: downloaded files. All photos of an album are collected into one call, and images sent "as file" count as photos.
 - `reply` / `edit` / `send_file`.
-- `data_dir`: persistent, at `data/<command>/`.
+- `ask(prompt, secret=False)`: ask the user a question and wait for their reply. With `secret=True`, the reply is deleted from the chat right after reading, which is useful for passwords. If the user sends `/cancel` or another command, or doesn't answer within 5 minutes, it raises `AskCancelled`, and the bot reports the call as cancelled.
+- `user_dir`: persistent and private to the calling Telegram user, at `data/<command>/users/<telegram_user_id>/`. Keep anything user-specific here, such as logins.
+- `data_dir`: persistent and shared by all users of the app, at `data/<command>/`.
 - `work_dir`: temporary, deleted after the call.
 
 Each call runs in its own thread. If an app raises an exception, the error is reported in the chat.
@@ -66,7 +68,7 @@ You don't need to set up the command menu: the gateway registers every app's com
 
 ## 2. Install
 All commands in this README run inside the `flipper_apps/` folder. There are two ways to install, and you can use both:
-- **Python venv**: for running and testing on your own computer. Some app logins need a computer with a screen, such as the [Strava photo login](apps/garmin_to_strava/README.md#2b-photos-optional).
+- **Python venv**: for running and testing on your own computer.
 - **Docker only**: for an always-on server. The image brings its own Python 3.12, so the server's Python version doesn't matter.
 
 ### Python venv
@@ -77,7 +79,7 @@ Needs **Python 3.11+**. Check with `python3 --version`.
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-playwright install chromium   # browser for the Strava photo step
+playwright install chromium   # headless browser, used by /garmin_to_strava for strava.com
 ```
 
 **Option B: your Python is older (for example 3.6 on Ubuntu 18.04)**
@@ -89,7 +91,7 @@ uv venv -p 3.12                                   # downloads Python 3.12 if nee
 source .venv/bin/activate
 python --version                                  # should print 3.12.x
 uv pip install -r requirements.txt
-playwright install chromium                       # browser for the Strava photo step
+playwright install chromium                       # headless browser, used by /garmin_to_strava for strava.com
 ```
 Run `source .venv/bin/activate` again in every new terminal before using `python`.
 
@@ -127,18 +129,23 @@ cp .env.example .env     # skip if you already did this above
 Fill in `TELEGRAM_TOKEN` and `ALLOWED_USER_IDS` from step 1, and `TZ` (for example `Europe/Berlin`) so that "today" means your day. App-specific settings are described in each app's README.
 
 ## 3. Set up the apps
-Some apps need one-time setup, such as connecting an account. Follow each app's README:
-- [`/garmin_to_strava`](apps/garmin_to_strava/README.md#setup): connect Garmin and Strava.
+Nothing to do here. Apps that need an account ask for the login in the chat the first time you use them, and remember it separately for each Telegram user. See each app's README for details, for example [`/garmin_to_strava`](apps/garmin_to_strava/README.md#accounts-and-logins).
+
+**About sending passwords to the bot:**
+- Messages to a Telegram bot aren't end-to-end encrypted. They pass through Telegram's servers to wherever the bot runs.
+- When an app asks for a password, the bot deletes your reply from the chat right after reading it.
+- Apps keep only the login result, such as a token or browser cookies, never the password. It's stored in `data/` on the machine running the bot, readable only by the bot's user.
+- Apps offer a command to forget your saved logins, for example `/garmin_to_strava forget all`.
 
 ## 4. Try it
-Start the bot in the foreground and send it `/ping`. Then try your apps; each app's README has a "Try it" step, for example [`/garmin_to_strava`](apps/garmin_to_strava/README.md#3-try-it). Press Ctrl+C to stop the bot.
+Start the bot in the foreground and send it `/ping`. Then try your apps, for example `/garmin_to_strava dry today` (see [its README](apps/garmin_to_strava/README.md#try-it)). Press Ctrl+C to stop the bot.
 ```bash
 python -m bot      # Python venv
 dc up              # Docker
 ```
 
 ## 5. Deploy (always on)
-Run the bot with Docker on any always-on Linux machine, such as a ~€4/month VPS (Hetzner), a Raspberry Pi or Fly.io with a volume. You need the "Docker only" part of step 2 done (including the `dc` shortcut), plus step 3. `./data` is mounted into the container and holds all tokens and sessions.
+Run the bot with Docker on any always-on Linux machine, such as a ~€4/month VPS (Hetzner), a Raspberry Pi or Fly.io with a volume. You need the "Docker only" part of step 2 done, including the `dc` shortcut. `./data` is mounted into the container and holds all tokens and sessions.
 
 ### Start the bot
 ```bash
@@ -158,10 +165,10 @@ Then send `/ping` to the bot in Telegram.
 | Restart | `dc restart` |
 | Apply changes to `.env` | `dc up -d`. A plain `restart` keeps the old settings. |
 | Update to the latest code | `git pull && dc up -d --build` |
-| Remove the container | `dc down`. Your tokens in `data/` are kept, and `dc up -d` brings it back. |
+| Remove the container | `dc down`. Saved logins in `data/` are kept, and `dc up -d` brings it back. |
 
 ### What happens on errors
-- **An error inside one app**, such as a failed Garmin login, is reported to you in the chat. The bot keeps running.
+- **An error inside one app**, such as Garmin being unreachable, is reported to you in the chat. The bot keeps running.
 - **Network or Telegram outages** don't stop the bot. It waits and retries on its own.
 - **If the bot process itself dies**, for example from a bad config or running out of memory, Docker starts it again automatically. That's because of `restart: unless-stopped` in `docker-compose.yml`. If it keeps crashing, Docker waits longer between attempts.
 - **A config mistake**, such as an empty `TELEGRAM_TOKEN`, makes it crash on every start. `dc ps` then shows `Restarting`, and `dc logs --tail 20` shows the reason. Fix `.env`, then run `dc up -d`.

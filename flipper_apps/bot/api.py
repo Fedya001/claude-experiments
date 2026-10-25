@@ -51,6 +51,9 @@ class BotAPI:
         return self.call("editMessageText", chat_id=chat_id, message_id=message_id,
                          text=_fit(text), link_preview_options={"is_disabled": True})
 
+    def delete_message(self, chat_id: int, message_id: int) -> None:
+        self.call("deleteMessage", chat_id=chat_id, message_id=message_id)
+
     def send_document(self, chat_id: int, path: Path, caption: str | None = None) -> dict:
         with open(path, "rb") as f:
             return self.call("sendDocument", files={"document": (path.name, f)},

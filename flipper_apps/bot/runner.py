@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import queue
 import shutil
 import tempfile
 import threading
@@ -9,7 +10,7 @@ import time
 from pathlib import Path
 
 from .api import BotAPI
-from .app import Context
+from .app import AskCancelled, Context
 from .registry import Registry
 
 log = logging.getLogger(__name__)
@@ -38,6 +39,45 @@ class Runner:
         self.allowed_users = allowed_users
         self.data_root = data_root
         self._albums: dict[str, tuple[float, list[dict]]] = {}
+        # Apps waiting for an answer from a user: (chat_id, user_id) -> reply queue
+        self._waiting: dict[tuple[int, int], queue.Queue] = {}
+        self._waiting_lock = threading.Lock()
+
+    def wait_for_reply(self, chat_id: int, user_id: int, timeout: float):
+        q: queue.Queue = queue.Queue(maxsize=1)
+        key = (chat_id, user_id)
+        with self._waiting_lock:
+            if old := self._waiting.get(key):
+                old.put(None)  # only the newest question per user is answered
+            self._waiting[key] = q
+        try:
+            return q.get(timeout=timeout)
+        except queue.Empty:
+            self.api.send_message(chat_id, "⌛ No answer received, cancelled.")
+            return None
+        finally:
+            with self._waiting_lock:
+                if self._waiting.get(key) is q:
+                    del self._waiting[key]
+
+    def _answer_waiting(self, msg: dict) -> bool:
+        """Routes a reply to a waiting question; True if the message was consumed."""
+        key = (msg["chat"]["id"], msg["from"]["id"])
+        with self._waiting_lock:
+            q = self._waiting.pop(key, None)
+        if q is None:
+            return False
+        text = msg.get("text") or ""
+        if text.startswith("/"):
+            q.put(None)  # any command cancels the question
+            return parse_command(text)[0] == "cancel"
+        if not text:
+            with self._waiting_lock:
+                self._waiting[key] = q  # keep waiting
+            self.api.send_message(key[0], "Please answer with a text message, or send /cancel.")
+            return True
+        q.put((text, msg["message_id"]))
+        return True
 
     def run_forever(self) -> None:
         try:
@@ -72,6 +112,8 @@ class Runner:
         if msg.get("from", {}).get("id") not in self.allowed_users:
             log.warning("ignoring message from %s", msg.get("from"))
             return
+        if self._answer_waiting(msg):
+            return
         if group := msg.get("media_group_id"):
             _, items = self._albums.get(group, (0.0, []))
             self._albums[group] = (time.monotonic(), items + [msg])
@@ -95,6 +137,9 @@ class Runner:
                                   "Put the command in the caption when attaching photos.")
             return
         name, args = cmd
+        if name == "cancel":
+            self.api.send_message(chat_id, "Nothing to cancel.")
+            return
         if name in ("help", "start"):
             self.api.send_message(chat_id, self.registry.help_text(args or None))
             return
@@ -113,8 +158,11 @@ class Runner:
         try:
             photos, documents = self._download_media(messages, work_dir)
             ctx = Context(api=self.api, chat_id=chat_id, user_id=first["from"]["id"], text=args,
-                          photos=photos, documents=documents, data_dir=data_dir, work_dir=work_dir)
+                          photos=photos, documents=documents, data_dir=data_dir, work_dir=work_dir,
+                          wait_for_reply=self.wait_for_reply)
             app.handle(ctx)
+        except AskCancelled:
+            self._safely(self.api.send_message, chat_id, f"Cancelled /{app.command}.")
         except Exception as e:
             log.exception("/%s failed", app.command)
             try:

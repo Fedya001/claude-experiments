@@ -1,17 +1,22 @@
 """Fetches activities as GPX from Garmin Connect via the unofficial `garminconnect` library."""
 from __future__ import annotations
 
-import os
+import base64
+import json
+import shutil
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Callable
 
-from garminconnect import Garmin
+from garminconnect import Garmin, GarminConnectAuthenticationError
 
 from .parse import Selector
+from .util import Ask, mask, read_json, write_json
 
 LOOKBACK_DAYS = 30  # how far back 'last N' without a date searches
+
+
+MAX_ATTEMPTS = 3
 
 
 @dataclass
@@ -24,24 +29,93 @@ class Activity:
     gpx: str
 
 
-def token_dir(data_dir: Path) -> Path:
-    return data_dir / "garmin_tokens"
+def token_dir(user_dir: Path) -> Path:
+    return user_dir / "garmin_tokens"
 
 
-def login(data_dir: Path, email: str | None = None, password: str | None = None,
-          prompt_mfa: Callable[[], str] | None = None) -> Garmin:
-    """Logs in with cached tokens; falls back to credentials (env GARMIN_EMAIL/PASSWORD)."""
-    tokens = token_dir(data_dir)
-    tokens.mkdir(parents=True, exist_ok=True)
-    email = email or os.getenv("GARMIN_EMAIL")
-    password = password or os.getenv("GARMIN_PASSWORD")
-    if not (tokens / "garmin_tokens.json").exists() and not (email and password):
-        raise RuntimeError("Garmin isn't connected yet: run "
-                           "`python -m apps.garmin_to_strava.cli auth-garmin` "
-                           "(see README → 3. Connect Garmin)")
-    client = Garmin(email, password, prompt_mfa=prompt_mfa)
-    client.login(str(tokens))  # saves refreshed tokens back to the directory
-    return client
+def _token_file(user_dir: Path) -> Path:
+    return token_dir(user_dir) / "garmin_tokens.json"
+
+
+def _account_file(user_dir: Path) -> Path:
+    return user_dir / "garmin_account.json"
+
+
+def is_connected(user_dir: Path) -> bool:
+    return _token_file(user_dir).exists()
+
+
+def connect(user_dir: Path, ask: Ask, reason: str = "") -> Garmin:
+    """Asks for email and password (and an MFA code if needed), logs in, saves the token.
+
+    The password is only used for this login and never stored.
+    """
+    note = reason
+    for _ in range(MAX_ATTEMPTS):
+        email = ask(f"{note}🔑 Connect Garmin: what's your Garmin Connect email?")
+        password = ask("Garmin password?", secret=True)
+        client = Garmin(email, password,
+                        prompt_mfa=lambda: ask("Garmin sent you a verification code. "
+                                               "What is it?", secret=True))
+        try:
+            client.login(str(token_dir(user_dir)))
+        except GarminConnectAuthenticationError:
+            note = "❌ Garmin rejected that email or password. "
+            continue
+        write_json(_account_file(user_dir), {
+            "email": email,
+            "name": client.get_full_name(),
+            "connected_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        })
+        return client
+    raise RuntimeError(f"Garmin login failed {MAX_ATTEMPTS} times")
+
+
+def login(user_dir: Path, ask: Ask) -> Garmin:
+    """Uses the saved token, or asks the user to log in if there is none or it stopped working."""
+    if is_connected(user_dir):
+        client = Garmin()
+        try:
+            client.login(str(token_dir(user_dir)))  # refreshes and re-saves the token
+            return client
+        except GarminConnectAuthenticationError:
+            forget(user_dir)
+            return connect(user_dir, ask, reason="Your Garmin login expired. ")
+    return connect(user_dir, ask)
+
+
+def forget(user_dir: Path) -> bool:
+    existed = is_connected(user_dir) or _account_file(user_dir).exists()
+    shutil.rmtree(token_dir(user_dir), ignore_errors=True)
+    _account_file(user_dir).unlink(missing_ok=True)
+    return existed
+
+
+def _jwt_expiry(token: str) -> datetime | None:
+    try:
+        payload = token.split(".")[1]
+        claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+        return datetime.fromtimestamp(float(claims["exp"]), timezone.utc)
+    except Exception:
+        return None
+
+
+def account_info(user_dir: Path) -> list[str] | None:
+    """Human-readable, masked description of the saved Garmin login, or None."""
+    if not is_connected(user_dir):
+        return None
+    account = read_json(_account_file(user_dir)) or {}
+    tokens = read_json(_token_file(user_dir)) or {}
+    lines = [f"Account: {account.get('name') or '?'} ({account.get('email') or '?'})",
+             f"Connected: {account.get('connected_at', '?')}"]
+    if token := tokens.get("di_token"):
+        expiry = _jwt_expiry(token)
+        lines.append(f"Access token: {mask(token)}"
+                     + (f", expires {expiry:%Y-%m-%d %H:%M} UTC (renewed automatically)"
+                        if expiry else ""))
+    if refresh := tokens.get("di_refresh_token"):
+        lines.append(f"Refresh token: {mask(refresh)}")
+    return lines
 
 
 def has_gps(meta: dict) -> bool:

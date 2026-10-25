@@ -18,7 +18,7 @@ class Registry:
     def register(self, app: App) -> None:
         if not COMMAND_RE.match(app.command):
             raise ValueError(f"invalid command {app.command!r}: Telegram allows only a-z, 0-9, _")
-        if app.command in self.apps or app.command in ("help", "start"):
+        if app.command in self.apps or app.command in ("help", "start", "cancel"):
             raise ValueError(f"duplicate command /{app.command}")
         if not app.description.strip():
             raise ValueError(f"/{app.command} needs a description (shown in the command menu)")
@@ -45,7 +45,7 @@ class Registry:
         return self.apps.get(command)
 
     def commands(self) -> list[tuple[str, str]]:
-        return [("help", "List commands")] + [
+        return [("help", "List commands"), ("cancel", "Cancel the current question")] + [
             (a.command, a.description) for a in sorted(self.apps.values(), key=lambda a: a.command)]
 
     def help_text(self, command: str | None = None) -> str:

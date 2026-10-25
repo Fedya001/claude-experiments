@@ -26,7 +26,7 @@ def test_discovers_bundled_apps():
 
 
 @pytest.mark.parametrize("command,description", [
-    ("garmin-to-strava", "x"), ("Garmin", "x"), ("help", "x"), ("nodesc", "")])
+    ("garmin-to-strava", "x"), ("Garmin", "x"), ("help", "x"), ("cancel", "x"), ("nodesc", "")])
 def test_rejects_invalid_apps(command, description):
     bad = App()
     bad.command, bad.description = command, description
@@ -53,6 +53,7 @@ def test_discover_skips_invalid_app_and_keeps_others(tmp_path, monkeypatch):
 class FakeAPI:
     def __init__(self):
         self.sent = []
+        self.deleted = []
         self.fail = False
 
     def send_message(self, chat_id, text, **kw):
@@ -60,6 +61,9 @@ class FakeAPI:
             raise RuntimeError("network down")
         self.sent.append(text)
         return {"message_id": len(self.sent)}
+
+    def delete_message(self, chat_id, message_id):
+        self.deleted.append(message_id)
 
     def download_file(self, file_id, dest):
         dest.write_bytes(file_id.encode())
@@ -81,7 +85,7 @@ def make_runner(tmp_path):
     reg = Registry()
     rec = Recorder()
     reg.register(rec)
-    runner = Runner(FakeAPI(), reg, {1}, tmp_path)
+    runner = Runner(FakeAPI(), reg, {1, 3}, tmp_path)
     return runner, rec
 
 
@@ -150,3 +154,64 @@ def test_long_error_is_truncated(tmp_path):
 def test_api_truncates_text():
     from bot.api import MAX_TEXT, _fit
     assert len(_fit("a" * 5000)) == MAX_TEXT and _fit("short") == "short"
+
+
+class Asker(App):
+    command, description = "askme", "asks a secret question"
+
+    def __init__(self):
+        self.answers = []
+
+    def handle(self, ctx):
+        from bot.app import AskCancelled
+        try:
+            self.answers.append(ctx.ask("Password?", secret=True, timeout=5))
+        except AskCancelled:
+            self.answers.append("cancelled")
+            raise
+
+
+def ask_runner(tmp_path):
+    runner, _ = make_runner(tmp_path)
+    app = Asker()
+    runner.registry.register(app)
+    return runner, app
+
+
+def test_ask_gets_reply_and_deletes_secret(tmp_path):
+    runner, app = ask_runner(tmp_path)
+    runner.on_message(msg(text="/askme"))
+    wait_for(lambda: runner._waiting)
+    runner.on_message(msg(user=3, text="not me", message_id=5))   # another user
+    runner.on_message(msg(text="hunter2", message_id=77))
+    wait_for(lambda: app.answers)
+    assert app.answers == ["hunter2"] and runner.api.deleted == [77]
+    assert "Password?" in runner.api.sent[0]
+
+
+def test_cancel_stops_question(tmp_path):
+    runner, app = ask_runner(tmp_path)
+    runner.on_message(msg(text="/askme"))
+    wait_for(lambda: runner._waiting)
+    runner.on_message(msg(text="/cancel"))
+    wait_for(lambda: any("Cancelled /askme" in t for t in runner.api.sent))
+    assert app.answers == ["cancelled"]
+    runner.on_message(msg(text="/cancel"))
+    assert runner.api.sent[-1] == "Nothing to cancel."
+
+
+def test_other_command_cancels_question_and_runs(tmp_path):
+    runner, app = ask_runner(tmp_path)
+    runner.on_message(msg(text="/askme"))
+    wait_for(lambda: runner._waiting)
+    runner.on_message(msg(text="/help"))
+    wait_for(lambda: app.answers)
+    assert app.answers == ["cancelled"]
+    assert any("/askme" in t and "/help" in t for t in runner.api.sent)
+
+
+def test_user_dir_is_per_user(tmp_path):
+    from bot.app import Context
+    a = Context(api=None, chat_id=1, user_id=1, text="", data_dir=tmp_path)
+    b = Context(api=None, chat_id=1, user_id=2, text="", data_dir=tmp_path)
+    assert a.user_dir != b.user_dir and a.user_dir.is_dir() and a.user_dir.name == "1"
