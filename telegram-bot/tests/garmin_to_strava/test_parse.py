@@ -16,6 +16,7 @@ TODAY = date(2026, 10, 25)
     ("rides today", Selector(TODAY, TODAY, family="ride")),
     ("last 2", Selector(limit=2)),
     ("last 3 runs yesterday", Selector(date(2026, 10, 24), date(2026, 10, 24), 3, "run")),
+    ("last ride", Selector(limit=1, family="ride")),
 ])
 def test_selector(text, expected):
     assert parse_selector(text, TODAY) == expected
@@ -59,3 +60,20 @@ def test_selector_matches_garmin_types():
     s = Selector(family="ride")
     assert s.matches_type("road_biking") and s.matches_type("gravel_cycling")
     assert not s.matches_type("running")
+
+
+@pytest.mark.parametrize("prefix", ["dry", "dry-run", "--dry-run", "DRY"])
+def test_dry_aliases(prefix):
+    r = parse_request(f"{prefix} today | T", TODAY)
+    assert r.dry_run and r.title == "T" and r.selector == Selector(TODAY, TODAY)
+
+
+def test_word_starting_with_dry_is_not_dry_run():
+    r = parse_request("Dryland loop", TODAY)
+    assert not r.dry_run and r.title == "Dryland loop"
+
+
+def test_one_word_title_that_is_a_type_stays_a_title():
+    r = parse_request("Ride\nGreat day out", TODAY)
+    assert r.selector == Selector(TODAY, TODAY)
+    assert r.title == "Ride" and r.description == "Great day out"

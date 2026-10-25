@@ -72,7 +72,7 @@ The bot then:
 4. adds the photos through strava.com, because the Strava API has no photo upload,
 5. reports progress in a single message that it keeps editing, ending with the activity link.
 
-**Selector** (the part before the first `|`): `today`, `yesterday`, `2026-10-24`, `last 2`, `rides today`, `last 3 runs`, or `latest activities today`. Types are ride, run, walk, hike and swim. If you leave out the `|` separators, the first line is the selector (or `today` if it isn't a valid one), the next line is the title and the rest is the description. Start with `dry` to get the merged GPX back without uploading.
+**Selector** (the part before the first `|`): `today`, `yesterday`, `2026-10-24`, `last 2`, `last ride` (meaning the single most recent ride), `rides today`, `last 3 runs`, or `latest activities today`. Types are ride, run, walk, hike and swim. If you leave out the `|` separators, the first line is the selector only if it names a day or `last`; otherwise it's the title and the selector is `today`. So a one-word title like `Ride` stays a title. After the title comes the description. Start with `dry` (or `dry-run`) to get the merged GPX back without uploading.
 
 ### One-time setup (on your laptop)
 ```bash

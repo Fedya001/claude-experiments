@@ -75,12 +75,15 @@ class GarminToStrava(App):
         progress("⬆️ Uploading to Strava…")
         activity_id, duplicate = strava.upload_gpx(gpx_path, req.title, req.description, external_id)
         url = f"https://www.strava.com/activities/{activity_id}"
+        fields = {"sport_type": SPORT_TYPES.get(activities[0].type_key)}
         if duplicate:
-            progress(f"⚠️ Strava says this is a duplicate of {url} — using that activity", True)
+            # The upload's name/description were dropped; apply them to the existing activity.
+            fields.update(name=req.title, description=req.description)
+            progress(f"♻️ Already on Strava, updated it: {url}", True)
         else:
             progress(f"✅ Uploaded: {url}", True)
-            if sport := SPORT_TYPES.get(activities[0].type_key):
-                strava.update_activity(activity_id, sport_type=sport)
+        if fields := {k: v for k, v in fields.items() if v}:
+            strava.update_activity(activity_id, **fields)
 
         if summary.start and summary.end:
             others = self._overlapping(strava, activity_id, summary.start, summary.end)
@@ -99,20 +102,21 @@ class GarminToStrava(App):
 
     @staticmethod
     def _overlapping(strava: Strava, activity_id: int, start, end) -> list[int]:
+        # Best effort: a failure here must not fail a run whose upload succeeded.
         try:
             candidates = strava.activities_between(start - timedelta(hours=12), end)
+            result = []
+            for a in candidates:
+                if a["id"] == activity_id:
+                    continue
+                a_start = datetime.fromisoformat(a["start_date"].replace("Z", "+00:00"))
+                a_end = a_start + timedelta(seconds=a.get("elapsed_time", 0))
+                if a_start < end and a_end > start:
+                    result.append(a["id"])
+            return result
         except Exception:
-            log.exception("listing Strava activities failed")
+            log.exception("checking overlapping Strava activities failed")
             return []
-        result = []
-        for a in candidates:
-            if a["id"] == activity_id:
-                continue
-            a_start = datetime.fromisoformat(a["start_date"].replace("Z", "+00:00"))
-            a_end = a_start + timedelta(seconds=a.get("elapsed_time", 0))
-            if a_start < end and a_end > start:
-                result.append(a["id"])
-        return result
 
 
 APP = GarminToStrava()

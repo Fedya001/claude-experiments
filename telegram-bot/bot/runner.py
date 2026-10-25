@@ -15,6 +15,7 @@ from .registry import Registry
 log = logging.getLogger(__name__)
 
 ALBUM_WAIT = 1.5  # seconds to wait for the remaining photos of an album
+MAX_ERROR = 1000  # error texts can carry whole HTTP response bodies
 
 
 def parse_command(text: str) -> tuple[str, str] | None:
@@ -39,7 +40,10 @@ class Runner:
         self._albums: dict[str, tuple[float, list[dict]]] = {}
 
     def run_forever(self) -> None:
-        self.api.set_my_commands(self.registry.commands())
+        try:
+            self.api.set_my_commands(self.registry.commands())
+        except Exception:
+            log.exception("setMyCommands failed; the command menu may be stale")
         offset = None
         log.info("polling; commands: %s", ", ".join(self.registry.apps))
         while True:
@@ -52,8 +56,17 @@ class Runner:
             for update in updates:
                 offset = update["update_id"] + 1
                 if msg := update.get("message"):
-                    self.on_message(msg)
+                    self._safely(self.on_message, msg)
             self.flush_albums()
+
+    @staticmethod
+    def _safely(fn, *args) -> None:
+        """Errors while handling one update must not stop the loop: Telegram would
+        redeliver the unconfirmed batch after a restart and rerun its commands."""
+        try:
+            fn(*args)
+        except Exception:
+            log.exception("handling update failed")
 
     def on_message(self, msg: dict) -> None:
         if msg.get("from", {}).get("id") not in self.allowed_users:
@@ -65,12 +78,12 @@ class Runner:
         else:
             self.dispatch([msg])
 
-    def flush_albums(self, force: bool = False) -> None:
+    def flush_albums(self) -> None:
         now = time.monotonic()
         for group, (last, items) in list(self._albums.items()):
-            if force or now - last >= ALBUM_WAIT:
+            if now - last >= ALBUM_WAIT:
                 del self._albums[group]
-                self.dispatch(items)
+                self._safely(self.dispatch, items)
 
     def dispatch(self, messages: list[dict]) -> None:
         chat_id = messages[0]["chat"]["id"]
@@ -78,9 +91,8 @@ class Runner:
                      if m.get("text") or m.get("caption")), "")
         cmd = parse_command(text)
         if cmd is None:
-            if text or messages:
-                self.api.send_message(chat_id, "Send a command, e.g. /help. "
-                                      "Put the command in the caption when attaching photos.")
+            self.api.send_message(chat_id, "Send a command, e.g. /help. "
+                                  "Put the command in the caption when attaching photos.")
             return
         name, args = cmd
         if name in ("help", "start"):
@@ -106,7 +118,8 @@ class Runner:
         except Exception as e:
             log.exception("/%s failed", app.command)
             try:
-                self.api.send_message(chat_id, f"❌ /{app.command} failed: {e}")
+                self.api.send_message(chat_id,
+                                      f"❌ /{app.command} failed: {str(e)[:MAX_ERROR]}")
             except Exception:
                 log.exception("could not report failure")
         finally:

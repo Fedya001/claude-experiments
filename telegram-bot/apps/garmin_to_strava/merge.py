@@ -6,7 +6,7 @@ by time, so Strava counts the gaps between activities as paused time.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import gpxpy
 import gpxpy.gpx
@@ -56,7 +56,14 @@ def merge(gpx_texts: list[str], name: str | None = None) -> gpxpy.gpx.GPX:
     return out
 
 
+def _utc(t: datetime | None) -> datetime | None:
+    """GPX times are UTC by spec; make offset-less ones timezone-aware."""
+    if t is None:
+        return None
+    return t.replace(tzinfo=timezone.utc) if t.utcoffset() is None else t.astimezone(timezone.utc)
+
+
 def summarize(gpx: gpxpy.gpx.GPX) -> Summary:
     bounds = gpx.get_time_bounds()
     return Summary(points=gpx.get_points_no(), distance_km=gpx.length_2d() / 1000,
-                   start=bounds.start_time, end=bounds.end_time)
+                   start=_utc(bounds.start_time), end=_utc(bounds.end_time))

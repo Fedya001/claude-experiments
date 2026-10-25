@@ -25,18 +25,39 @@ def test_discovers_bundled_apps():
     assert reg.commands()[0][0] == "help"
 
 
-def test_rejects_invalid_command():
+@pytest.mark.parametrize("command,description", [
+    ("garmin-to-strava", "x"), ("Garmin", "x"), ("help", "x"), ("nodesc", "")])
+def test_rejects_invalid_apps(command, description):
     bad = App()
-    bad.command = "garmin-to-strava"
+    bad.command, bad.description = command, description
     with pytest.raises(ValueError):
         Registry().register(bad)
+
+
+def test_discover_skips_invalid_app_and_keeps_others(tmp_path, monkeypatch):
+    pkg = tmp_path / "someapps"
+    for name, cmd in [("good", "good"), ("bad", "Bad")]:
+        (pkg / name).mkdir(parents=True)
+        (pkg / name / "__init__.py").write_text(
+            "from bot.app import App\n"
+            f"class A(App):\n    command = {cmd!r}\n    description = 'd'\n"
+            "APP = A()\n")
+    (pkg / "__init__.py").write_text("")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    import importlib
+    reg = Registry()
+    reg.discover(importlib.import_module("someapps"))
+    assert set(reg.apps) == {"good"}
 
 
 class FakeAPI:
     def __init__(self):
         self.sent = []
+        self.fail = False
 
     def send_message(self, chat_id, text, **kw):
+        if self.fail:
+            raise RuntimeError("network down")
         self.sent.append(text)
         return {"message_id": len(self.sent)}
 
@@ -47,6 +68,7 @@ class FakeAPI:
 
 class Recorder(App):
     command = "rec"
+    description = "records calls"
 
     def __init__(self):
         self.calls = []
@@ -75,7 +97,7 @@ def wait_for(cond):
     raise AssertionError("timed out")
 
 
-def test_album_is_one_call_with_all_photos(tmp_path):
+def test_album_is_one_call_with_all_photos(tmp_path, monkeypatch):
     runner, rec = make_runner(tmp_path)
     photo = lambda fid: [{"file_id": fid + "_s", "width": 90, "height": 90},
                          {"file_id": fid, "width": 900, "height": 900}]
@@ -83,7 +105,8 @@ def test_album_is_one_call_with_all_photos(tmp_path):
     runner.on_message(msg(media_group_id="g", photo=photo("b")))
     runner.flush_albums()
     assert rec.calls == []          # still waiting for more photos
-    runner.flush_albums(force=True)
+    monkeypatch.setattr("bot.runner.ALBUM_WAIT", 0)
+    runner.flush_albums()
     wait_for(lambda: rec.calls)
     text, photos, data_dir = rec.calls[0]
     assert text == "today | Ride" and photos == ["a", "b"]
@@ -98,3 +121,32 @@ def test_ignores_strangers_and_reports_unknown(tmp_path):
     assert "Unknown command" in runner.api.sent[-1]
     runner.on_message(msg(text="/help"))
     assert "/rec" in runner.api.sent[-1]
+
+
+def test_errors_while_handling_updates_do_not_stop_polling(tmp_path):
+    runner, rec = make_runner(tmp_path)
+    runner.api.fail = True
+    runner._safely(runner.on_message, msg(text="/nope"))   # must not raise
+    runner.api.fail = False
+    runner._safely(runner.on_message, msg(text="/rec hi"))
+    wait_for(lambda: rec.calls)
+    assert rec.calls[0][0] == "hi"
+
+
+def test_long_error_is_truncated(tmp_path):
+    from bot.runner import MAX_ERROR
+
+    class Boom(App):
+        command, description = "boom", "fails"
+
+        def handle(self, ctx):
+            raise RuntimeError("x" * 10_000)
+
+    runner, _ = make_runner(tmp_path)
+    runner._run_app(Boom(), [msg(text="/boom")], "")
+    assert len(runner.api.sent[-1]) < MAX_ERROR + 50
+
+
+def test_api_truncates_text():
+    from bot.api import MAX_TEXT, _fit
+    assert len(_fit("a" * 5000)) == MAX_TEXT and _fit("short") == "short"

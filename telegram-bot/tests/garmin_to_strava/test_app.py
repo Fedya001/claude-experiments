@@ -90,3 +90,13 @@ def test_photo_failure_does_not_fail_run(tmp_path, stubs, monkeypatch):
     ctx = FakeCtx(tmp_path, "today", [tmp_path / "p.jpg"])
     app_mod.APP.handle(ctx)
     assert "Photos failed (session expired)" in ctx.messages[-1]
+
+
+def test_duplicate_upload_updates_existing_activity(tmp_path, stubs, monkeypatch):
+    monkeypatch.setattr(FakeStrava, "upload_gpx",
+                        lambda self, *a: (FakeStrava.uploads.append(a), (99, True))[1])
+    ctx = FakeCtx(tmp_path, "today | New title | New desc")
+    app_mod.APP.handle(ctx)
+    assert FakeStrava.updates == [
+        (99, {"sport_type": "Ride", "name": "New title", "description": "New desc"})]
+    assert "updated it" in ctx.messages[-1]

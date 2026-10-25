@@ -20,6 +20,8 @@ class Registry:
             raise ValueError(f"invalid command {app.command!r}: Telegram allows only a-z, 0-9, _")
         if app.command in self.apps or app.command in ("help", "start"):
             raise ValueError(f"duplicate command /{app.command}")
+        if not app.description.strip():
+            raise ValueError(f"/{app.command} needs a description (shown in the command menu)")
         self.apps[app.command] = app
 
     def discover(self, package: ModuleType) -> None:
@@ -32,7 +34,11 @@ class Registry:
                 continue
             app = getattr(module, "APP", None)
             if isinstance(app, App):
-                self.register(app)
+                try:
+                    self.register(app)
+                except ValueError:
+                    log.exception("skipping app %s", name)
+                    continue
                 log.info("loaded /%s from %s", app.command, name)
 
     def get(self, command: str) -> App | None:

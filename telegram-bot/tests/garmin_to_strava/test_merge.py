@@ -42,3 +42,10 @@ def test_summary_excludes_gap_between_activities():
 def test_merge_rejects_empty():
     with pytest.raises(ValueError):
         merge([])
+
+
+def test_summary_times_are_utc_aware_even_without_offset():
+    naive = (FIX / "morning.gpx").read_text().replace(".000Z", "")
+    summary = summarize(merge([naive]))
+    assert summary.start.utcoffset().total_seconds() == 0
+    assert summary.start.hour == 8

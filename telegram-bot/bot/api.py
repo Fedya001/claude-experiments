@@ -12,6 +12,13 @@ class TelegramError(RuntimeError):
     pass
 
 
+MAX_TEXT = 4096  # Telegram's limit for message text
+
+
+def _fit(text: str) -> str:
+    return text if len(text) <= MAX_TEXT else text[:MAX_TEXT - 1] + "…"
+
+
 class BotAPI:
     def __init__(self, token: str, base_url: str = "https://api.telegram.org"):
         self._url = f"{base_url}/bot{token}"
@@ -37,12 +44,12 @@ class BotAPI:
                          allowed_updates=["message"])
 
     def send_message(self, chat_id: int, text: str, **kw: Any) -> dict:
-        return self.call("sendMessage", chat_id=chat_id, text=text,
+        return self.call("sendMessage", chat_id=chat_id, text=_fit(text),
                          link_preview_options={"is_disabled": True}, **kw)
 
     def edit_message_text(self, chat_id: int, message_id: int, text: str) -> dict:
-        return self.call("editMessageText", chat_id=chat_id, message_id=message_id, text=text,
-                         link_preview_options={"is_disabled": True})
+        return self.call("editMessageText", chat_id=chat_id, message_id=message_id,
+                         text=_fit(text), link_preview_options={"is_disabled": True})
 
     def send_document(self, chat_id: int, path: Path, caption: str | None = None) -> dict:
         with open(path, "rb") as f:
