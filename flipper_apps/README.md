@@ -8,7 +8,7 @@ The gateway talks to the official [Telegram Bot API](https://core.telegram.org/b
 |---|---|
 | `/help` | Lists the commands, or shows the usage of one: `/help garmin_to_strava` |
 | `/ping` | Example app that replies with `pong` |
-| [`/garmin_to_strava`](apps/garmin_to_strava/README.md) | Merges Garmin activities and uploads them to Strava with photos |
+| [`/garmin_to_strava`](apps/garmin_to_strava/README.md) | Merges Garmin activities and uploads them to Strava |
 
 Each app has its own README with its usage and setup:
 - [`/garmin_to_strava`](apps/garmin_to_strava/README.md)
@@ -79,7 +79,6 @@ Needs **Python 3.11+**. Check with `python3 --version`.
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-playwright install chromium   # headless browser, used by /garmin_to_strava for strava.com
 ```
 
 **Option B: your Python is older (for example 3.6 on Ubuntu 18.04)**
@@ -91,14 +90,13 @@ uv venv -p 3.12                                   # downloads Python 3.12 if nee
 source .venv/bin/activate
 python --version                                  # should print 3.12.x
 uv pip install -r requirements.txt
-playwright install chromium                       # headless browser, used by /garmin_to_strava for strava.com
 ```
 Run `source .venv/bin/activate` again in every new terminal before using `python`.
 
 ### Docker only
 **Requirements:**
 - [Docker](https://docs.docker.com/engine/install/).
-- About 3 GB of free disk space, because the image is large (check with `df -h`).
+- About 500 MB of free disk space (check with `df -h`).
 - On a Raspberry Pi, a 64-bit OS: `uname -m` must print `aarch64`.
 
 **Choose your Compose command.** Docker Compose comes in two forms, and you only need the one that works on your machine:
@@ -126,15 +124,15 @@ Each setup command below has a Docker form, `dc run --rm bot <command>`. It runs
 ```bash
 cp .env.example .env     # skip if you already did this above
 ```
-Fill in `TELEGRAM_TOKEN` and `ALLOWED_USER_IDS` from step 1, and `TZ` (for example `Europe/Berlin`) so that "today" means your day. App-specific settings are described in each app's README.
+Fill in `TELEGRAM_TOKEN` and `ALLOWED_USER_IDS` from step 1, and `TZ` (for example `Europe/Berlin`) so that "today" means your day. Some apps need settings of their own, described in their README. For example, `/garmin_to_strava` needs `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET` ([how to get them](apps/garmin_to_strava/README.md#one-time-strava-api-application)).
 
 ## 3. Set up the apps
-Nothing to do here. Apps that need an account ask for the login in the chat the first time you use them, and remember it separately for each Telegram user. See each app's README for details, for example [`/garmin_to_strava`](apps/garmin_to_strava/README.md#accounts-and-logins).
+Apps that need an account ask you to log in or connect it in the chat the first time you use them, and remember it separately for each Telegram user. Some also need a one-time setting by whoever runs the bot. See each app's README, for example [`/garmin_to_strava`](apps/garmin_to_strava/README.md#accounts-and-logins).
 
 **About sending passwords to the bot:**
 - Messages to a Telegram bot aren't end-to-end encrypted. They pass through Telegram's servers to wherever the bot runs.
 - When an app asks for a password, the bot deletes your reply from the chat right after reading it.
-- Apps keep only the login result, such as a token or browser cookies, never the password. It's stored in `data/` on the machine running the bot, readable only by the bot's user.
+- Apps keep only the login result, such as a token, never the password. It's stored in `data/` on the machine running the bot, readable only by the bot's user.
 - Apps offer a command to forget your saved logins, for example `/garmin_to_strava forget all`.
 
 ## 4. Try it
@@ -183,7 +181,7 @@ systemctl is-enabled docker     # should print "enabled"
 To test it, run `sudo reboot`, then `dc ps` after the machine is back. If you stopped the bot with `dc stop` before the reboot, it stays stopped.
 
 ### Troubleshooting: `no space left on device`
-The build needs several GB of temporary space. Check what's using it and remove unused Docker data:
+The build needs some temporary space. Check what's using it and remove unused Docker data:
 ```bash
 df -h                      # free space per disk
 docker system df           # space used by Docker
