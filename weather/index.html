@@ -296,14 +296,61 @@
     `<path transform="translate(${dx} ${dy})" d="M12 30h17a6 6 0 0 0 0-12 8.5 8.5 0 0 0-16.3-2.2A7 7 0 0 0 12 30z" fill="${fill}" opacity=".85"/>`;
   const ICONS = {
     sun: () => SUN(20, 20, 7),
+    mostlysun: () => SUN(17, 16, 7) + `<g transform="translate(14 17) scale(.62)">${CLOUD(0, 0, "var(--muted)")}</g>`,
     partly: () => SUN(14, 14, 5.5) + CLOUD(2, 4),
+    mostlycloud: () => SUN(11, 11, 4.5) + CLOUD(0, 2),
     cloud: () => CLOUD(0, 0),
     fog: () => CLOUD(0, -4) + `<g stroke="var(--muted)" stroke-width="2" stroke-linecap="round"><line x1="9" y1="31" x2="31" y2="31"/><line x1="12" y1="35" x2="28" y2="35"/></g>`,
     rain: () => CLOUD(0, -4) + `<g stroke="var(--rain)" stroke-width="2" stroke-linecap="round"><line x1="14" y1="30" x2="12" y2="35"/><line x1="21" y1="30" x2="19" y2="35"/><line x1="28" y1="30" x2="26" y2="35"/></g>`,
     snow: () => CLOUD(0, -4) + `<g fill="var(--cool)"><circle cx="13" cy="32" r="1.8"/><circle cx="20" cy="35" r="1.8"/><circle cx="27" cy="32" r="1.8"/></g>`,
     storm: () => CLOUD(0, -4) + `<path d="M21 27l-4 7h4l-2 5 6-8h-4l2-4z" fill="var(--accent)"/>`,
   };
-  const icon = (code, cls = "") => `<svg class="icon ${cls}" viewBox="0 0 40 40" aria-hidden="true">${ICONS[wmo(code)[1]]()}</svg>`;
+  const svgIcon = (key, cls = "") => `<svg class="icon ${cls}" viewBox="0 0 40 40" aria-hidden="true">${ICONS[key]()}</svg>`;
+  const icon = (code, cls = "") => svgIcon(wmo(code)[1], cls);
+
+  // A day's condition, as a person planning their day would describe it.
+  // Open-Meteo's daily weather_code is the *most severe* hour of the day, so one overcast
+  // hour at night labels a mostly sunny day "Overcast". Instead we look at daytime hours:
+  // weather (storms, snow, rain, fog) wins if it lasts a while; otherwise the sky label
+  // comes from average cloud cover, using the US National Weather Service sky terms.
+  const DAY_FROM = 7, DAY_TO = 19, MIN_WEATHER_HOURS = 2;
+  const SKY = [ // [upper bound of average cloud cover %, label, icon]
+    [12, "Sunny", "sun"],
+    [37, "Mostly sunny", "mostlysun"],
+    [62, "Partly cloudy", "partly"],
+    [87, "Mostly cloudy", "mostlycloud"],
+    [100, "Cloudy", "cloud"],
+  ];
+  const WEATHER_KINDS = ["storm", "snow", "rain", "fog"]; // priority order when tied
+  function dayCondition(d, i) {
+    const date = d.daily.time[i], h = d.hourly;
+    const idx = [];
+    for (let k = 0; k < h.time.length; k++) {
+      if (!h.time[k].startsWith(date)) continue;
+      const hour = +h.time[k].slice(11, 13);
+      if (hour >= DAY_FROM && hour <= DAY_TO) idx.push(k);
+    }
+    if (!idx.length || !h.cloud_cover) { const [label, key] = wmo(d.daily.weather_code[i]); return { label, key }; }
+
+    // Hours of each kind of weather, and the most common code within that kind.
+    const byKind = {};
+    for (const k of idx) {
+      const code = h.weather_code[k], kind = wmo(code)[1];
+      if (!WEATHER_KINDS.includes(kind)) continue;
+      const g = (byKind[kind] ||= { hours: 0, codes: {} });
+      g.hours++; g.codes[code] = (g.codes[code] || 0) + 1;
+    }
+    const kinds = WEATHER_KINDS.filter((k) => byKind[k] && byKind[k].hours >= MIN_WEATHER_HOURS);
+    if (kinds.length) {
+      const kind = kinds.reduce((a, b) => (byKind[b].hours > byKind[a].hours ? b : a));
+      const codes = Object.entries(byKind[kind].codes);
+      const code = +codes.reduce((a, b) => (b[1] > a[1] || (b[1] === a[1] && +b[0] > +a[0]) ? b : a))[0];
+      return { label: wmo(code)[0], key: kind };
+    }
+    const cover = idx.reduce((s, k) => s + (h.cloud_cover[k] ?? 0), 0) / idx.length;
+    const [, label, key] = SKY.find(([max]) => cover <= max);
+    return { label, key };
+  }
 
   // ---------- helpers ----------
   const $ = (s) => document.querySelector(s);
@@ -324,7 +371,7 @@
       wind_speed_unit: state.unit === "fahrenheit" ? "mph" : "kmh",
       current: "temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m",
       daily: "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,wind_speed_10m_max,sunrise,sunset",
-      hourly: "temperature_2m,weather_code,precipitation_probability",
+      hourly: "temperature_2m,weather_code,precipitation_probability,cloud_cover",
     });
     const res = await fetch(`${FORECAST}?${params}`);
     if (!res.ok) throw new Error(`Open-Meteo returned ${res.status}`);
@@ -401,10 +448,11 @@
       // Gradient spans the whole scale so colour reflects absolute temperature, not just this day.
       const span = (100 / width) * 100, pos = left >= 100 - width ? 100 : (left / (100 - width)) * 100;
       const pp = dl.precipitation_probability_max[i];
+      const cond = dayCondition(d, i);
       rows += `<div class="day">
         <span class="dname">${dayName(dl.time[i], i)}<small>${dayDate(dl.time[i])}</small></span>
-        ${icon(dl.weather_code[i], "sm")}
-        <span class="cond">${wmo(dl.weather_code[i])[0]}</span>
+        ${svgIcon(cond.key, "sm")}
+        <span class="cond">${cond.label}</span>
         <span class="lo">${deg(lo)}</span>
         <span class="bar" title="${deg(lo)} to ${deg(hi)}"><i style="left:${left}%;width:${width}%;--span:${span}%;--pos:${pos}%"></i></span>
         <span class="hi">${deg(hi)}</span>
