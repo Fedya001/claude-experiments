@@ -5,7 +5,8 @@ A single-page weather summary for the places you follow.
 - **Places:** Minsk, Warsaw, Dublin and New York by default. Add any city with the search box, remove with ×.
 - **Timeline:** Today (hourly), 3, 7 or 14 days.
 - **Units:** °C / °F.
-- Your choices are remembered in the browser (localStorage).
+- **Theme:** follows your device by default; the sun/moon button switches between light and dark.
+- Your choices (places, timeline, units, theme) are remembered in the browser (localStorage).
 
 ## Data source
 
