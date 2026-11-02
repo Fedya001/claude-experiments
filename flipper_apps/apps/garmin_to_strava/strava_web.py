@@ -28,6 +28,8 @@ MAX_ATTEMPTS = 3
 TIMEOUT_MS = 60_000
 SETTLE_MS = 10_000      # max wait for the page to go quiet after an action
 APPEAR_MS = 15_000      # max wait for one of several expected elements to show up
+NEXT_MS = 8_000         # after submitting, how long to wait for the next screen
+CLICK_MS = 10_000       # a click that can't happen in this time is blocked by something
 # A regular desktop Chrome: one stable page layout, and no "HeadlessChrome" in the user agent.
 BROWSER_PROFILE = {
     "locale": "en-US",
@@ -36,11 +38,21 @@ BROWSER_PROFILE = {
                    "Chrome/140.0.0.0 Safari/537.36"),
 }
 
+# Cookiebot consent dialog that covers strava.com until answered.
+SEL_COOKIES_REJECT = ("#CybotCookiebotDialogBodyButtonDecline, "
+                      "button:text-matches('reject non-essential|reject all|^\\s*deny\\s*$', 'i')")
+SEL_COOKIES_ACCEPT = ("#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll, "
+                      "button:text-matches('^\\s*accept all\\s*$', 'i')")
+# Email-first login: Email + "Log In", then a password screen with a code option.
 SEL_EMAIL = "input[type=email], input[name=email], #email"
-SEL_SUBMIT = "button[type=submit], input[type=submit], #login-button"
-SEL_EMAIL_CODE = (":is(button, a):text-matches('email me a (one-time )?code|send (me )?a code"
-                  "|(use|with) a one-time code|log ?in with (a )?code', 'i')")
+SEL_PASSWORD = "input[type=password]"
+SEL_SUBMIT = ("button[type=submit], input[type=submit], #login-button, "
+              "button:text-matches('^\\s*(log ?in|continue|next)\\s*$', 'i')")
+SEL_EMAIL_CODE = (":is(button, a):text-matches('email me a (one-time |login )?code"
+                  "|send (me )?(a|an) (one-time |login |email )?code|one-time code|use a code"
+                  "|(log|sign) ?in with (a |an )?(email )?code', 'i')")
 SEL_FORGOT = ":is(button, a):text-matches('forgot', 'i')"
+SEL_LOGIN_ERROR = "[role=alert], [class*=error], [class*=Error]"
 RATE_LIMITED_RE = re.compile(r"too many|try again later|rate limit", re.IGNORECASE)
 SEL_CODE = ("input[autocomplete=one-time-code], input[name=code], input[name=otp], "
             "input[inputmode=numeric]")
@@ -135,18 +147,59 @@ def _wait_for_any(page, selectors: list[str], timeout_ms: int = APPEAR_MS) -> in
         page.wait_for_timeout(250)
 
 
-def _fill_and_submit(page, selector: str, value: str, *, click_fallback: bool = True) -> None:
-    """Fills the visible field and submits its form with Enter, like a person would."""
+def _dismiss_cookies(page, wait_ms: int = 0) -> None:
+    """Answers the cookie dialog (essential cookies only) so it stops covering the page."""
+    found = _wait_for_any(page, [SEL_COOKIES_REJECT, SEL_COOKIES_ACCEPT], timeout_ms=wait_ms)
+    if found is not None:
+        _visible(page, [SEL_COOKIES_REJECT, SEL_COOKIES_ACCEPT][found]).click(timeout=CLICK_MS)
+        _settle(page)
+
+
+def _goto(page, url: str) -> None:
+    page.goto(url, wait_until="domcontentloaded")
+    _settle(page)
+    _dismiss_cookies(page, wait_ms=3_000)  # the dialog's script loads a moment later
+
+
+def _click(page, selector: str) -> None:
+    _dismiss_cookies(page)
+    _visible(page, selector).click(timeout=CLICK_MS)
+    _settle(page)
+
+
+def _visible_error(page) -> str | None:
+    errors = page.locator(SEL_LOGIN_ERROR).filter(visible=True)
+    for i in range(errors.count()):
+        if text := errors.nth(i).inner_text().strip():
+            return " ".join(text.split())
+    return None
+
+
+def _strava_error(text: str) -> RuntimeError:
+    hint = (" Strava may be blocking the automated browser."
+            if "unexpected error" in text.lower() else "")
+    return RuntimeError(f"Strava says: {text.rstrip('.')}.{hint}")
+
+
+def _fill_and_submit(page, selector: str, value: str, expect: list[str] | None = None) -> None:
+    """Fills the visible field and submits it with Enter, like a person would.
+
+    With `expect`, waits for one of those elements (the next screen, which on
+    Strava appears without a URL change). If none shows up, clicks the form's
+    button instead; if Strava shows an error, raises it.
+    """
+    _dismiss_cookies(page)
     field = _visible(page, selector)
     field.fill(value)
-    url = page.url
     field.press("Enter")
     _settle(page)
-    if click_fallback and page.url == url and field.is_visible():
-        button = field.locator("xpath=ancestor::form[1]").locator(SEL_SUBMIT).filter(visible=True)
-        if button.count():
-            button.first.click()
-            _settle(page)
+    if not expect or _wait_for_any(page, expect, timeout_ms=NEXT_MS) is not None:
+        return
+    if error := _visible_error(page):
+        raise _strava_error(error)
+    _click(page, SEL_SUBMIT)
+    if _wait_for_any(page, expect, timeout_ms=NEXT_MS) is None and (error := _visible_error(page)):
+        raise _strava_error(error)
 
 
 def _short(error: Exception) -> str:
@@ -199,30 +252,28 @@ class RateLimited(RuntimeError):
 def _request_code(page, user_dir: Path, email: str) -> None:
     """Gets Strava to email a one-time login code and leaves the page at the code box."""
     with _step(page, user_dir, "open the login page"):
-        page.goto(f"{BASE}/login", wait_until="domcontentloaded")
+        _goto(page, f"{BASE}/login")
         _visible(page, SEL_EMAIL).wait_for()
     with _step(page, user_dir, "enter the email"):
-        _visible(page, SEL_EMAIL).fill(email)
-        if not _is_visible(page, SEL_EMAIL_CODE):
-            # Two-step login: the code option appears after the email is submitted.
-            _fill_and_submit(page, SEL_EMAIL, email)
+        _fill_and_submit(page, SEL_EMAIL, email,
+                         expect=[SEL_EMAIL_CODE, SEL_CODE, SEL_FORGOT, SEL_PASSWORD])
     with _step(page, user_dir, "ask for an emailed code"):
         found = _wait_for_any(page, [SEL_EMAIL_CODE, SEL_CODE, SEL_FORGOT])
         if found == 0:
-            _visible(page, SEL_EMAIL_CODE).click()
-            _settle(page)
+            _click(page, SEL_EMAIL_CODE)
         elif found == 2:
             # Strava's "Forgot your password?" also emails a one-time code.
-            _visible(page, SEL_FORGOT).click()
-            _settle(page)
+            _click(page, SEL_FORGOT)
             if _wait_for_any(page, [SEL_EMAIL, SEL_CODE]) == 0:
-                _fill_and_submit(page, SEL_EMAIL, email)
+                _fill_and_submit(page, SEL_EMAIL, email, expect=[SEL_CODE])
         elif found is None:
             raise _failure(page, user_dir, "ask for an emailed code", NO_CODE_OPTION)
     if _wait_for_any(page, [SEL_CODE]) is None:
         if RATE_LIMITED_RE.search(page.locator("body").inner_text()):
             raise RateLimited()
-        raise _failure(page, user_dir, "open the code box", NO_CODE_OPTION)
+        error = _visible_error(page)
+        raise _failure(page, user_dir, "open the code box",
+                       str(_strava_error(error)) if error else NO_CODE_OPTION)
 
 
 def connect(user_dir: Path, ask: Ask, reason: str = "") -> None:
@@ -239,7 +290,7 @@ def connect(user_dir: Path, ask: Ask, reason: str = "") -> None:
         for _ in range(MAX_ATTEMPTS):
             code = ask(prompt, secret=True)
             with _step(page, user_dir, "enter the code"):
-                _fill_and_submit(page, SEL_CODE, code, click_fallback=False)
+                _fill_and_submit(page, SEL_CODE, code)
                 if _wait_for_any(page, [SEL_CODE], timeout_ms=2_000) is None \
                         and not _logged_out(page):
                     break
@@ -248,8 +299,7 @@ def connect(user_dir: Path, ask: Ask, reason: str = "") -> None:
             raise RuntimeError(f"Strava didn't accept the code {MAX_ATTEMPTS} times")
 
         with _step(page, user_dir, "open the dashboard"):
-            page.goto(f"{BASE}/dashboard", wait_until="domcontentloaded")
-            _settle(page)
+            _goto(page, f"{BASE}/dashboard")
             if _logged_out(page):
                 raise _failure(page, user_dir, "open the dashboard",
                                "the login didn't stick, please try again")
@@ -297,8 +347,7 @@ def upload(user_dir: Path, gpx: Path, name: str | None, description: str | None,
     with _browser(state_file(user_dir)) as context:
         page = context.new_page()
         with _step(page, user_dir, "open the upload page"):
-            page.goto(f"{BASE}/upload/select", wait_until="domcontentloaded")
-            _settle(page)
+            _goto(page, f"{BASE}/upload/select")
             if _logged_out(page):
                 raise SessionExpired()
 
@@ -322,8 +371,7 @@ def upload(user_dir: Path, gpx: Path, name: str | None, description: str | None,
             activity_id = ids[-1]
 
         with _step(page, user_dir, "open the activity's edit page"):
-            page.goto(f"{BASE}/activities/{activity_id}/edit", wait_until="domcontentloaded")
-            _settle(page)
+            _goto(page, f"{BASE}/activities/{activity_id}/edit")
             if _logged_out(page):
                 raise SessionExpired()
         with _step(page, user_dir, "set the title and description"):
@@ -346,7 +394,7 @@ def upload(user_dir: Path, gpx: Path, name: str | None, description: str | None,
             except Exception as e:
                 photo_error = _short(e)
         with _step(page, user_dir, "save the activity"):
-            _visible(page, SEL_SAVE).click()
+            _click(page, SEL_SAVE)
             page.wait_for_url(re.compile(rf".*/activities/{activity_id}(?!/edit).*"))
             _save_state(context, user_dir)  # keep cookies fresh
     return activity_id, duplicate, photo_error
