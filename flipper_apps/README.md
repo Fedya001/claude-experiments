@@ -99,7 +99,7 @@ Run `source .venv/bin/activate` again in every new terminal before using `python
 ### Docker only
 **Requirements:**
 - [Docker](https://docs.docker.com/engine/install/).
-- About 1.5 GB of free disk space, mostly for the headless browser in the image (check with `df -h`).
+- About 1 GB of free disk space (check with `df -h`). The image is roughly 800 MB, most of it the headless browser `/garmin_to_strava` uses for strava.com. Each update builds a new image, so remove old ones with `docker image prune -f`.
 - On a Raspberry Pi, a 64-bit OS: `uname -m` must print `aarch64`.
 
 **Choose your Compose command.** Docker Compose comes in two forms, and you only need the one that works on your machine:
