@@ -34,6 +34,9 @@ class ConsoleContext(Context):
     def ask(self, prompt: str, *, secret: bool = False, timeout: float = 300) -> str:
         return (getpass.getpass if secret else input)(prompt + " ").strip()
 
+    def send_file(self, path: Path, caption: str | None = None) -> None:
+        print(f"{caption or 'File'}: {path}")
+
 
 def main() -> None:
     load_dotenv()

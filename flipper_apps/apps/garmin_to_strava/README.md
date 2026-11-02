@@ -52,5 +52,5 @@ python -m apps.garmin_to_strava.cli accounts
 
 ## Caveats
 - Garmin has no public API for personal accounts. This app uses the unofficial [`garminconnect`](https://github.com/cyberjunky/python-garminconnect) library, which can break when Garmin changes its login.
-- The Strava steps automate the strava.com website, and the page details they rely on are listed at the top of [`strava_web.py`](strava_web.py). If Strava changes its site, the bot reports which step failed. If only the photos fail, the activity is still uploaded and the bot tells you to add them in the Strava app.
+- The Strava steps automate the strava.com website, and the page details they rely on are listed at the top of [`strava_web.py`](strava_web.py). If Strava changes its site, the bot reports which step failed and sends a screenshot and the HTML of the page it got stuck on, so the selectors can be fixed. These files show your own Strava page, so only share them with someone you trust. If only the photos fail, the activity is still uploaded and the bot tells you to add them in the Strava app.
 - Telegram compresses photos sent the normal way. To keep full resolution, send them "as file".

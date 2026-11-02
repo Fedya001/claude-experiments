@@ -58,6 +58,18 @@ class GarminToStrava(App):
     usage = USAGE
 
     def handle(self, ctx: Context) -> None:
+        try:
+            self._dispatch(ctx)
+        except strava_web.RateLimited as e:
+            ctx.reply(f"❌ {e}")
+        except strava_web.StravaStepFailed as e:
+            ctx.reply(f"❌ {e}\n\nHere's what the bot saw on strava.com. If it looks like a "
+                      "bot problem, send these files to whoever maintains it (they show your "
+                      "own Strava page).")
+            for path in e.files:
+                ctx.send_file(path)
+
+    def _dispatch(self, ctx: Context) -> None:
         word, _, rest = ctx.text.strip().partition(" ")
         word, rest = word.lower(), rest.strip().lower()
         if word in ("", "help"):

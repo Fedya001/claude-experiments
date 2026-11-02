@@ -177,3 +177,30 @@ def test_bad_selector_points_to_help(tmp_path, stubs):
     assert ctx.messages[-1].startswith("❌ unknown word 'tomorrowish'")
     assert "/garmin_to_strava help" in ctx.messages[-1]
     assert stubs["uploads"] == []
+
+
+def test_strava_step_failure_reports_step_and_sends_debug_files(tmp_path, stubs, monkeypatch):
+    shot = tmp_path / "strava_error.png"
+    shot.write_bytes(b"png")
+    html = tmp_path / "strava_error.html"
+    html.write_text("<html/>")
+
+    def failing_connect(user_dir, ask, reason=""):
+        raise app_mod.strava_web.StravaStepFailed("enter the email", "element is not visible",
+                                                  [shot, html])
+    monkeypatch.setattr(app_mod.strava_web, "connect", failing_connect)
+    sent = []
+    ctx = FakeCtx(tmp_path, "login strava")
+    ctx.send_file = lambda path, caption=None: sent.append(path)
+    app_mod.APP.handle(ctx)
+    assert "Strava step 'enter the email' failed: element is not visible" in ctx.messages[-1]
+    assert sent == [shot, html]
+
+
+def test_strava_rate_limit_is_explained(tmp_path, stubs, monkeypatch):
+    def limited(user_dir, ask, reason=""):
+        raise app_mod.strava_web.RateLimited()
+    monkeypatch.setattr(app_mod.strava_web, "connect", limited)
+    ctx = FakeCtx(tmp_path, "login strava")
+    app_mod.APP.handle(ctx)
+    assert "about an hour" in ctx.messages[-1]
