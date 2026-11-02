@@ -19,6 +19,7 @@ Each app has its own README with its usage and setup:
 3. [Set up the apps](#3-set-up-the-apps), such as connecting accounts
 4. [Try it](#4-try-it)
 5. [Deploy (always on)](#5-deploy-always-on)
+6. [Update](#6-update) to the latest code
 
 ## Layout
 ```
@@ -164,7 +165,7 @@ Then send `/ping` to the bot in Telegram.
 | Start again | `dc start` |
 | Restart | `dc restart` |
 | Apply changes to `.env` | `dc up -d`. A plain `restart` keeps the old settings. |
-| Update to the latest code | `git pull && dc up -d --build` |
+| Update to the latest code | `git pull && dc up -d --build` (details in [6. Update](#6-update)) |
 | Remove the container | `dc down`. Saved logins in `data/` are kept, and `dc up -d` brings it back. |
 
 The logs never contain your bot token or passwords, so they're safe to share when asking for help.
@@ -194,3 +195,59 @@ docker builder prune -a    # remove the remaining build cache
 ```
 Then run `dc up -d --build` again.
 
+## 6. Update
+Your `.env` and `data/` (all saved logins) aren't part of git, so updating never touches them. Run everything inside the `flipper_apps/` folder.
+
+### 1. Check which branch you're on
+```bash
+git branch --show-current
+```
+Until the pull request is merged, the code lives on the `claude/brave-davinci-59syio` branch. After it's merged, switch to `main` once and stay there:
+```bash
+git switch main
+```
+
+### 2. See what's new (optional)
+```bash
+git fetch
+git log --oneline HEAD..@{u}     # commits you don't have yet
+```
+
+### 3. Get the new code
+```bash
+git pull
+```
+If git refuses because you changed files yourself, run `git status` to see which ones. Then either undo your changes with `git restore <file>`, or set them aside with `git stash`, pull, and bring them back with `git stash pop`.
+
+### 4. Check for new settings
+```bash
+git diff HEAD@{1} -- .env.example    # what changed in the settings template with this pull
+```
+If new variables appear, add them to your `.env`. No output means nothing changed.
+
+### 5. Restart with the new code
+**Docker:**
+```bash
+dc up -d --build        # rebuild the image and replace the running container
+dc logs -f              # wait for "polling; commands: …", then Ctrl+C
+docker image prune -f   # optional: delete the old image to free disk space
+```
+A plain `dc restart` is **not** enough: it restarts the old image without the new code.
+
+**Python venv:**
+```bash
+source .venv/bin/activate
+python -m pip install -r requirements.txt     # or: uv pip install -r requirements.txt
+python -m bot                                 # stop the old one with Ctrl+C first
+```
+
+Then send `/ping` to the bot to check that it's running.
+
+### Going back to the previous version
+If the update breaks something, go back to the version you had before the pull, rebuild, and tell whoever maintains the code what went wrong:
+```bash
+git log --oneline -5            # find the commit you were on
+git switch --detach <commit>    # for example: git switch --detach 3cffb4e
+dc up -d --build
+```
+To return to the latest code later, run `git switch <branch>` (for example `git switch main`), then repeat step 5.
