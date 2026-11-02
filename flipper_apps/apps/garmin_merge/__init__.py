@@ -21,7 +21,7 @@ Merge
   The bot merges them in time order and sends you the GPX file.
 
 Garmin login (only ever yours)
-  /garmin_merge accounts    show your connected Garmin account
+  /garmin_merge account     show your connected Garmin account
   /garmin_merge login       log in (again)
   /garmin_merge forget      delete your saved login
 
@@ -55,8 +55,8 @@ class GarminMerge(App):
         if word in ("", "help"):
             # A bare command shows help instead of merging by accident.
             ctx.reply(USAGE)
-        elif word == "accounts":
-            self.accounts(ctx)
+        elif word == "account":
+            self.account(ctx)
         elif word in ("login", "connect"):
             self.login(ctx, rest)
         elif word in ("forget", "logout"):
@@ -76,7 +76,7 @@ class GarminMerge(App):
         return False
 
     @staticmethod
-    def accounts(ctx: Context) -> None:
+    def account(ctx: Context) -> None:
         info = garmin.account_info(ctx.user_dir)
         body = "\n".join(f"  {line}" for line in info) if info else \
             "  not connected (you'll be asked to log in when it's needed)"

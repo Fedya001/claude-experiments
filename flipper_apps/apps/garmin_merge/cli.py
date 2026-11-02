@@ -2,7 +2,7 @@
 
 Run from the flipper_apps folder:
   python -m apps.garmin_merge.cli "today | Lake loop"
-  python -m apps.garmin_merge.cli accounts
+  python -m apps.garmin_merge.cli account
   python -m apps.garmin_merge.cli --user 123456789 forget
 
 Logins are asked in the terminal and saved for the given Telegram user id

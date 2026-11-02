@@ -28,7 +28,7 @@ The bot never stores your password. It keeps only the Garmin login token, which 
 
 | Command | What it does |
 |---|---|
-| `/garmin_merge accounts` | Shows your connected Garmin account: name, email, when connected, and tokens masked like `abcd…wxyz` (never in full) |
+| `/garmin_merge account` | Shows your connected Garmin account: name, email, when connected, and tokens masked like `abcd…wxyz` (never in full) |
 | `/garmin_merge login` | Logs in to Garmin now (again). `connect` works too. |
 | `/garmin_merge forget` | Deletes your saved Garmin login, after asking you to confirm. `logout` works too. |
 | `/garmin_merge help` | Shows the short help |
@@ -40,7 +40,7 @@ You can also run the app without Telegram. It asks the same questions there and 
 ```bash
 python -m apps.garmin_merge.cli "today | Test"                         # Python venv
 dc run --rm bot python -m apps.garmin_merge.cli "today | Test"         # Docker
-python -m apps.garmin_merge.cli accounts
+python -m apps.garmin_merge.cli account
 ```
 
 ## Caveats

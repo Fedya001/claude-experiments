@@ -91,15 +91,15 @@ def test_nothing_found(tmp_path, stubs):
     assert "No Garmin activities" in ctx.messages[-1] and ctx.files == []
 
 
-def test_accounts_are_masked_and_per_user(tmp_path):
+def test_account_is_masked_and_per_user(tmp_path):
     connect_garmin(tmp_path / "data" / "users" / "1")
-    mine = FakeCtx(tmp_path, "accounts", user_id=1)
+    mine = FakeCtx(tmp_path, "account", user_id=1)
     app_mod.APP.handle(mine)
     text = mine.messages[-1]
     assert "Me (me@x.org)" in text and "eyJh…" in text and JWT not in text
     assert "refresh-token-0123456789" not in text and "expires 2030-03-17" in text
 
-    other = FakeCtx(tmp_path, "accounts", user_id=2)
+    other = FakeCtx(tmp_path, "account", user_id=2)
     app_mod.APP.handle(other)
     assert "me@x.org" not in other.messages[-1] and "not connected" in other.messages[-1]
 
