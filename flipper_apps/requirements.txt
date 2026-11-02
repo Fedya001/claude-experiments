@@ -3,3 +3,4 @@ python-dotenv>=1.0
 # garmin_to_strava
 garminconnect>=0.2.30
 gpxpy>=1.6
+playwright==1.64.1   # headless browser for strava.com

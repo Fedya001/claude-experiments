@@ -80,6 +80,7 @@ Needs **Python 3.11+**. Check with `python3 --version`.
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
+playwright install chromium   # headless browser, used by /garmin_to_strava for strava.com
 ```
 
 **Option B: your Python is older (for example 3.6 on Ubuntu 18.04)**
@@ -91,13 +92,14 @@ uv venv -p 3.12                                   # downloads Python 3.12 if nee
 source .venv/bin/activate
 python --version                                  # should print 3.12.x
 uv pip install -r requirements.txt
+playwright install chromium                       # headless browser, used by /garmin_to_strava for strava.com
 ```
 Run `source .venv/bin/activate` again in every new terminal before using `python`.
 
 ### Docker only
 **Requirements:**
 - [Docker](https://docs.docker.com/engine/install/).
-- About 500 MB of free disk space (check with `df -h`).
+- About 1.5 GB of free disk space, mostly for the headless browser in the image (check with `df -h`).
 - On a Raspberry Pi, a 64-bit OS: `uname -m` must print `aarch64`.
 
 **Choose your Compose command.** Docker Compose comes in two forms, and you only need the one that works on your machine:
@@ -125,17 +127,17 @@ Each setup command below has a Docker form, `dc run --rm bot <command>`. It runs
 ```bash
 cp .env.example .env     # skip if you already did this above
 ```
-Fill in `TELEGRAM_TOKEN` and `ALLOWED_USER_IDS` from step 1, and `TZ` (for example `Europe/Berlin`) so that "today" means your day. Some apps need settings of their own, described in their README. For example, `/garmin_to_strava` needs `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET` ([how to get them](apps/garmin_to_strava/README.md#one-time-strava-api-application)).
+Fill in `TELEGRAM_TOKEN` and `ALLOWED_USER_IDS` from step 1, and `TZ` (for example `Europe/Berlin`) so that "today" means your day. App-specific settings, if any, are described in each app's README.
 
 ## 3. Set up the apps
-Apps that need an account ask you to log in or connect it in the chat the first time you use them, and remember it separately for each Telegram user. Some also need a one-time setting by whoever runs the bot. See each app's README, for example [`/garmin_to_strava`](apps/garmin_to_strava/README.md#accounts-and-logins).
+Apps that need an account ask you to log in or connect it in the chat the first time you use them, and remember it separately for each Telegram user. See each app's README, for example [`/garmin_to_strava`](apps/garmin_to_strava/README.md#accounts-and-logins).
 
 **Privacy and passwords:**
 - Each user's logins are stored separately, under their own Telegram user id, and app commands only ever show or change the caller's own data. The bot ignores everyone not in `ALLOWED_USER_IDS`.
 - The bot only answers in one-to-one chats. In groups it ignores everything, because others would see its questions and it can't delete password replies there.
 - Messages to a Telegram bot aren't end-to-end encrypted. They pass through Telegram's servers to wherever the bot runs.
 - When an app asks for a password, the bot deletes your reply from the chat right after reading it.
-- Apps keep only the login result, such as a token, never the password. It's stored in `data/` on the machine running the bot, readable only by the bot's user, so whoever runs the server can read it.
+- Apps keep only the login result, such as a token or browser cookies, never the password. It's stored in `data/` on the machine running the bot, readable only by the bot's user, so whoever runs the server can read it.
 - Apps offer a command to forget your saved logins, for example `/garmin_to_strava forget all`.
 
 ## 4. Try it
@@ -246,6 +248,7 @@ A plain `dc restart` is **not** enough: it restarts the old image without the ne
 ```bash
 source .venv/bin/activate
 python -m pip install -r requirements.txt     # or: uv pip install -r requirements.txt
+playwright install chromium                   # in case the browser version changed
 python -m bot                                 # stop the old one with Ctrl+C first
 ```
 

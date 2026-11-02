@@ -1,13 +1,12 @@
 """/garmin_to_strava — merge today's Garmin activities and upload them to Strava."""
 from __future__ import annotations
 
-import hashlib
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from bot.app import App, Context
 
-from . import garmin, merge, strava_api
+from . import garmin, merge, strava_web
 from .parse import SelectorError, parse_request
 
 log = logging.getLogger(__name__)
@@ -18,22 +17,32 @@ Upload
   Which activities: today, yesterday, 2026-10-24, last 2, last ride, rides today
   Then the title, then the description, separated by |
   The bot merges them, uploads to Strava and sends the link.
-  Photos: Strava doesn't let apps add them, so add them in the Strava app.
+  Attach photos to the same message (command in the caption) and they're added too.
 
 Accounts (only ever yours)
   /garmin_to_strava accounts                    show connected accounts
   /garmin_to_strava login garmin|strava         log in (again)
   /garmin_to_strava forget garmin|strava|all    delete saved logins
 
-First time: the bot asks for your Garmin login in the chat and sends
-Strava's official link (Google sign-in works). Passwords are never stored.
+First time: the bot asks for your Garmin login, then your Strava email and the
+code Strava emails you (Google sign-in accounts work). Passwords are never stored.
 /cancel stops any question.
 /garmin_to_strava help shows this message."""
 
 HELP_HINT = "Send /garmin_to_strava help for examples."
 
-SERVICES = {"garmin": garmin, "strava": strava_api}
+SERVICES = {"garmin": garmin, "strava": strava_web}
 SERVICE_NAMES = {"garmin": "Garmin", "strava": "Strava"}
+
+# Garmin typeKey -> Strava sport type
+SPORT_TYPES = {
+    "road_biking": "Ride", "cycling": "Ride", "gravel_cycling": "GravelRide",
+    "mountain_biking": "MountainBikeRide", "e_bike_fitness": "EBikeRide",
+    "e_mountain_biking": "EMountainBikeRide",
+    "running": "Run", "street_running": "Run", "trail_running": "TrailRun",
+    "walking": "Walk", "hiking": "Hike",
+    "open_water_swimming": "Swim", "lap_swimming": "Swim",
+}
 
 
 def fmt_duration(td: timedelta | None) -> str:
@@ -153,59 +162,26 @@ class GarminToStrava(App):
         progress(f"🔗 {'Merged' if len(activities) > 1 else 'Track'}: {summary.distance_km:.1f} km, "
                  f"{fmt_duration(summary.elapsed)} elapsed, {summary.points} points")
 
-        if not strava_api.is_connected(ctx.user_dir):
+        if not strava_web.is_connected(ctx.user_dir):
             ctx.reply("Now let's connect your Strava account.")
-            strava_api.connect(ctx.user_dir, ctx.ask)
-        progress("⬆️ Uploading to Strava…")
-        ids = ",".join(str(a.id) for a in activities)
-        external_id = f"garmin-{hashlib.sha1(ids.encode()).hexdigest()[:16]}.gpx"
-        strava = strava_api.Strava(ctx.user_dir)
+            strava_web.connect(ctx.user_dir, ctx.ask)
+        progress("⬆️ Uploading to Strava…"
+                 + (f" (with {len(ctx.photos)} photo(s))" if ctx.photos else ""))
+        args = (gpx_path, req.title, req.description,
+                SPORT_TYPES.get(activities[0].type_key), ctx.photos)
         try:
-            activity_id, duplicate = strava.upload_gpx(gpx_path, req.title, req.description,
-                                                       external_id)
-        except strava_api.NotConnected:
-            strava_api.forget(ctx.user_dir)
-            strava_api.connect(ctx.user_dir, ctx.ask,
-                               reason="Strava no longer accepts the bot's access. ")
-            activity_id, duplicate = strava.upload_gpx(gpx_path, req.title, req.description,
-                                                       external_id)
+            activity_id, duplicate, photo_error = strava_web.upload(ctx.user_dir, *args)
+        except strava_web.SessionExpired:
+            strava_web.forget(ctx.user_dir)
+            strava_web.connect(ctx.user_dir, ctx.ask, reason="Your Strava login expired. ")
+            activity_id, duplicate, photo_error = strava_web.upload(ctx.user_dir, *args)
 
         url = f"https://www.strava.com/activities/{activity_id}"
-        fields = {"sport_type": strava_api.SPORT_TYPES.get(activities[0].type_key)}
-        if duplicate:
-            # The upload's name/description were dropped; apply them to the existing activity.
-            fields.update(name=req.title, description=req.description)
-            progress(f"♻️ Already on Strava, updated it: {url}", True)
-        else:
-            progress(f"✅ Uploaded: {url}", True)
-        if fields := {k: v for k, v in fields.items() if v}:
-            strava.update_activity(activity_id, **fields)
-
-        if summary.start and summary.end:
-            if others := self._overlapping(strava, activity_id, summary.start, summary.end):
-                progress("⚠️ Overlapping Strava activities (Garmin auto-sync?), delete them "
-                         "in Strava:\n" + "\n".join(f"  https://www.strava.com/activities/{i}"
-                                                     for i in others))
+        progress(f"♻️ Already on Strava, updated it: {url}" if duplicate else f"✅ Uploaded: {url}",
+                 True)
         if ctx.photos:
-            progress(f"📷 Strava doesn't let apps add photos. Add your {len(ctx.photos)} "
-                     f"photo(s) in the Strava app: {url}")
-
-    @staticmethod
-    def _overlapping(strava: strava_api.Strava, activity_id: int, start, end) -> list[int]:
-        # Best effort: a failure here must not fail a run whose upload succeeded.
-        try:
-            result = []
-            for a in strava.activities_between(start - timedelta(hours=12), end):
-                if a["id"] == activity_id:
-                    continue
-                a_start = datetime.fromisoformat(a["start_date"].replace("Z", "+00:00"))
-                a_end = a_start + timedelta(seconds=a.get("elapsed_time", 0))
-                if a_start < end and a_end > start:
-                    result.append(a["id"])
-            return result
-        except Exception:
-            log.exception("checking overlapping Strava activities failed")
-            return []
+            progress(f"📷 Photos failed ({photo_error}); add them in the Strava app"
+                     if photo_error else f"📷 {len(ctx.photos)} photo(s) added")
 
 
 APP = GarminToStrava()
