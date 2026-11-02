@@ -2,7 +2,7 @@ from datetime import date
 
 import pytest
 
-from apps.garmin_to_strava.parse import Selector, SelectorError, parse_request, parse_selector
+from apps.garmin_merge.parse import Selector, SelectorError, parse_request, parse_selector
 
 TODAY = date(2026, 10, 25)
 

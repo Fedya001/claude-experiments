@@ -11,7 +11,7 @@ from bot.runner import Runner, parse_command
 @pytest.mark.parametrize("text,expected", [
     ("/ping", ("ping", "")),
     ("/Ping@MyBot hello there", ("ping", "hello there")),
-    ("/garmin_to_strava\ntoday | Ride", ("garmin_to_strava", "today | Ride")),
+    ("/garmin_merge\ntoday | Ride", ("garmin_merge", "today | Ride")),
     ("hello", None),
 ])
 def test_parse_command(text, expected):
@@ -21,7 +21,7 @@ def test_parse_command(text, expected):
 def test_discovers_bundled_apps():
     reg = Registry()
     reg.discover(apps)
-    assert {"ping", "garmin_to_strava"} <= set(reg.apps)
+    assert {"ping", "garmin_merge"} <= set(reg.apps)
     assert reg.commands()[0][0] == "help"
 
 

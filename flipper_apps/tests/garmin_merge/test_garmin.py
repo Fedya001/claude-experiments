@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from apps.garmin_to_strava import garmin
+from apps.garmin_merge import garmin
 
 
 class FakeGarmin:

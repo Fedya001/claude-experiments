@@ -6,12 +6,12 @@ The gateway talks to the official [Telegram Bot API](https://core.telegram.org/b
 
 | Command | What it does |
 |---|---|
-| `/help` | Lists the commands, or shows the usage of one: `/help garmin_to_strava` |
+| `/help` | Lists the commands, or shows the usage of one: `/help garmin_merge` |
 | `/ping` | Example app that replies with `pong` |
-| [`/garmin_to_strava`](apps/garmin_to_strava/README.md) | Merges Garmin activities and uploads them to Strava |
+| [`/garmin_merge`](apps/garmin_merge/README.md) | Merges Garmin activities into one GPX file and sends it to you |
 
 Each app has its own README with its usage and setup:
-- [`/garmin_to_strava`](apps/garmin_to_strava/README.md)
+- [`/garmin_merge`](apps/garmin_merge/README.md)
 
 **Setup overview**
 1. [Create the Telegram bot](#1-create-the-telegram-bot)
@@ -80,7 +80,6 @@ Needs **Python 3.11+**. Check with `python3 --version`.
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-playwright install chromium   # headless browser, used by /garmin_to_strava for strava.com
 ```
 
 **Option B: your Python is older (for example 3.6 on Ubuntu 18.04)**
@@ -92,14 +91,13 @@ uv venv -p 3.12                                   # downloads Python 3.12 if nee
 source .venv/bin/activate
 python --version                                  # should print 3.12.x
 uv pip install -r requirements.txt
-playwright install chromium                       # headless browser, used by /garmin_to_strava for strava.com
 ```
 Run `source .venv/bin/activate` again in every new terminal before using `python`.
 
 ### Docker only
 **Requirements:**
 - [Docker](https://docs.docker.com/engine/install/).
-- About 1 GB of free disk space (check with `df -h`). The image is roughly 800 MB, most of it the headless browser `/garmin_to_strava` uses for strava.com. Each update builds a new image, so remove old ones with `docker image prune -f`.
+- About 500 MB of free disk space (check with `df -h`). Each update builds a new image, so remove old ones with `docker image prune -f`.
 - On a Raspberry Pi, a 64-bit OS: `uname -m` must print `aarch64`.
 
 **Choose your Compose command.** Docker Compose comes in two forms, and you only need the one that works on your machine:
@@ -130,18 +128,18 @@ cp .env.example .env     # skip if you already did this above
 Fill in `TELEGRAM_TOKEN` and `ALLOWED_USER_IDS` from step 1, and `TZ` (for example `Europe/Berlin`) so that "today" means your day. App-specific settings, if any, are described in each app's README.
 
 ## 3. Set up the apps
-Apps that need an account ask you to log in or connect it in the chat the first time you use them, and remember it separately for each Telegram user. See each app's README, for example [`/garmin_to_strava`](apps/garmin_to_strava/README.md#accounts-and-logins).
+Apps that need an account ask you to log in or connect it in the chat the first time you use them, and remember it separately for each Telegram user. See each app's README, for example [`/garmin_merge`](apps/garmin_merge/README.md#garmin-login).
 
 **Privacy and passwords:**
 - Each user's logins are stored separately, under their own Telegram user id, and app commands only ever show or change the caller's own data. The bot ignores everyone not in `ALLOWED_USER_IDS`.
 - The bot only answers in one-to-one chats. In groups it ignores everything, because others would see its questions and it can't delete password replies there.
 - Messages to a Telegram bot aren't end-to-end encrypted. They pass through Telegram's servers to wherever the bot runs.
 - When an app asks for a password, the bot deletes your reply from the chat right after reading it.
-- Apps keep only the login result, such as a token or browser cookies, never the password. It's stored in `data/` on the machine running the bot, readable only by the bot's user, so whoever runs the server can read it.
-- Apps offer a command to forget your saved logins, for example `/garmin_to_strava forget all`.
+- Apps keep only the login result, such as a token, never the password. It's stored in `data/` on the machine running the bot, readable only by the bot's user, so whoever runs the server can read it.
+- Apps offer a command to forget your saved logins, for example `/garmin_merge forget`.
 
 ## 4. Try it
-Start the bot in the foreground and send it `/ping`. Then try your apps, for example `/garmin_to_strava today | Test` (see [its README](apps/garmin_to_strava/README.md#try-it)). Press Ctrl+C to stop the bot.
+Start the bot in the foreground and send it `/ping`. Then try your apps, for example `/garmin_merge today` (see [its README](apps/garmin_merge/README.md)). Press Ctrl+C to stop the bot.
 ```bash
 python -m bot      # Python venv
 dc up              # Docker
@@ -198,7 +196,7 @@ docker builder prune -a    # remove the remaining build cache
 Then run `dc up -d --build` again.
 
 ### Troubleshooting: `permission denied` reading `data/…` during the build
-For example: `no permission to read from … data/garmin_to_strava/users/…/garmin_account.json`. Your copy of the code is from before this was fixed: it sent the `data/` folder to the Docker build, and the saved logins in it are readable only by root. Get the fix and build again:
+For example: `no permission to read from … data/garmin_merge/users/…/garmin_account.json`. Your copy of the code is from before this was fixed: it sent the `data/` folder to the Docker build, and the saved logins in it are readable only by root. Get the fix and build again:
 ```bash
 git pull
 dc up -d --build
@@ -248,7 +246,6 @@ A plain `dc restart` is **not** enough: it restarts the old image without the ne
 ```bash
 source .venv/bin/activate
 python -m pip install -r requirements.txt     # or: uv pip install -r requirements.txt
-playwright install chromium                   # in case the browser version changed
 python -m bot                                 # stop the old one with Ctrl+C first
 ```
 

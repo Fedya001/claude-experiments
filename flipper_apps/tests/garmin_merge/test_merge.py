@@ -3,7 +3,7 @@ from pathlib import Path
 import gpxpy
 import pytest
 
-from apps.garmin_to_strava.merge import merge, summarize
+from apps.garmin_merge.merge import merge, summarize
 
 FIX = Path(__file__).parent / "fixtures"
 

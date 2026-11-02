@@ -1,9 +1,9 @@
-"""Run /garmin_to_strava in a terminal, without Telegram (for testing).
+"""Run /garmin_merge in a terminal, without Telegram (for testing).
 
 Run from the flipper_apps folder:
-  python -m apps.garmin_to_strava.cli "today | Lake loop" photo1.jpg
-  python -m apps.garmin_to_strava.cli accounts
-  python -m apps.garmin_to_strava.cli --user 123456789 "forget all"
+  python -m apps.garmin_merge.cli "today | Lake loop"
+  python -m apps.garmin_merge.cli accounts
+  python -m apps.garmin_merge.cli --user 123456789 forget
 
 Logins are asked in the terminal and saved for the given Telegram user id
 (default: the first of ALLOWED_USER_IDS), so the bot reuses them.
@@ -35,18 +35,20 @@ class ConsoleContext(Context):
         return (getpass.getpass if secret else input)(prompt + " ").strip()
 
     def send_file(self, path: Path, caption: str | None = None) -> None:
-        print(f"{caption or 'File'}: {path}")
+        # The user's data folder is mounted from the host in Docker, unlike the working dir.
+        dest = self.user_dir / path.name
+        dest.write_bytes(path.read_bytes())
+        print(f"Saved {dest}")
 
 
 def main() -> None:
     load_dotenv()
     allowed = os.getenv("ALLOWED_USER_IDS", "").replace(",", " ").split()
-    parser = argparse.ArgumentParser(prog="garmin_to_strava", description=__doc__,
+    parser = argparse.ArgumentParser(prog="garmin_merge", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--user", type=int, default=int(allowed[0]) if allowed else None,
                         help="Telegram user id whose logins to use (default: first of ALLOWED_USER_IDS)")
-    parser.add_argument("text", help="what you'd send after /garmin_to_strava")
-    parser.add_argument("photos", nargs="*", type=Path)
+    parser.add_argument("text", help="what you'd send after /garmin_merge")
     args = parser.parse_args()
     if args.user is None:
         parser.error("set ALLOWED_USER_IDS in .env or pass --user")
@@ -54,7 +56,6 @@ def main() -> None:
     data_dir = Path(os.getenv("DATA_DIR", "data")) / APP.command
     with tempfile.TemporaryDirectory() as tmp:
         ctx = ConsoleContext(api=None, chat_id=0, user_id=args.user, text=args.text,
-                             photos=[p.resolve() for p in args.photos],
                              data_dir=data_dir, work_dir=Path(tmp))
         APP.handle(ctx)
 

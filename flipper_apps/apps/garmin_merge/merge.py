@@ -1,7 +1,7 @@
 """Merges several GPX files into one track, like https://joewein.net/bike/gpxmerge/.
 
 All tracks end up in a single <trk>, one <trkseg> per original segment, ordered
-by time, so Strava counts the gaps between activities as paused time.
+by time, so apps like Strava count the gaps between activities as paused time.
 """
 from __future__ import annotations
 
