@@ -90,7 +90,8 @@ def make_runner(tmp_path):
 
 
 def msg(**kw):
-    return {"chat": {"id": 5}, "from": {"id": kw.pop("user", 1)}, **kw}
+    return {"chat": {"id": 5, "type": kw.pop("chat_type", "private")},
+            "from": {"id": kw.pop("user", 1)}, **kw}
 
 
 def wait_for(cond):
@@ -215,3 +216,36 @@ def test_user_dir_is_per_user(tmp_path):
     a = Context(api=None, chat_id=1, user_id=1, text="", data_dir=tmp_path)
     b = Context(api=None, chat_id=1, user_id=2, text="", data_dir=tmp_path)
     assert a.user_dir != b.user_dir and a.user_dir.is_dir() and a.user_dir.name == "1"
+
+
+def test_group_chats_are_ignored(tmp_path):
+    runner, rec = make_runner(tmp_path)
+    for chat_type in ("group", "supergroup", "channel"):
+        runner.on_message(msg(chat_type=chat_type, text="/rec hi"))
+    runner.on_message(msg(chat_type="group", text="/help"))
+    assert runner.api.sent == [] and rec.calls == []
+
+
+def test_logging_hides_request_urls_with_the_token():
+    import logging
+
+    from bot.__main__ import setup_logging
+    setup_logging()
+    assert not logging.getLogger("httpx").isEnabledFor(logging.INFO)
+    assert not logging.getLogger("httpcore").isEnabledFor(logging.INFO)
+
+
+def test_file_download_error_does_not_reveal_token(tmp_path):
+    import httpx
+
+    from bot.api import BotAPI, TelegramError
+
+    def handler(request):
+        if request.url.path.endswith("/getFile"):
+            return httpx.Response(200, json={"ok": True, "result": {"file_path": "x.jpg"}})
+        return httpx.Response(404)
+    api = BotAPI("123:SECRET")
+    api._http = httpx.Client(transport=httpx.MockTransport(handler))
+    with pytest.raises(TelegramError) as err:
+        api.download_file("f", tmp_path / "x.jpg")
+    assert "SECRET" not in str(err.value)

@@ -62,7 +62,9 @@ class BotAPI:
     def download_file(self, file_id: str, dest: Path) -> Path:
         info = self.call("getFile", file_id=file_id)
         resp = self._http.get(f"{self._file_url}/{info['file_path']}")
-        resp.raise_for_status()
+        if resp.status_code != 200:
+            # not raise_for_status(): its message would contain the URL, i.e. the bot token
+            raise TelegramError(f"file download failed: HTTP {resp.status_code}")
         dest.write_bytes(resp.content)
         return dest
 

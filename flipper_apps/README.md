@@ -129,10 +129,12 @@ Fill in `TELEGRAM_TOKEN` and `ALLOWED_USER_IDS` from step 1, and `TZ` (for examp
 ## 3. Set up the apps
 Apps that need an account ask you to log in or connect it in the chat the first time you use them, and remember it separately for each Telegram user. Some also need a one-time setting by whoever runs the bot. See each app's README, for example [`/garmin_to_strava`](apps/garmin_to_strava/README.md#accounts-and-logins).
 
-**About sending passwords to the bot:**
+**Privacy and passwords:**
+- Each user's logins are stored separately, under their own Telegram user id, and app commands only ever show or change the caller's own data. The bot ignores everyone not in `ALLOWED_USER_IDS`.
+- The bot only answers in one-to-one chats. In groups it ignores everything, because others would see its questions and it can't delete password replies there.
 - Messages to a Telegram bot aren't end-to-end encrypted. They pass through Telegram's servers to wherever the bot runs.
 - When an app asks for a password, the bot deletes your reply from the chat right after reading it.
-- Apps keep only the login result, such as a token, never the password. It's stored in `data/` on the machine running the bot, readable only by the bot's user.
+- Apps keep only the login result, such as a token, never the password. It's stored in `data/` on the machine running the bot, readable only by the bot's user, so whoever runs the server can read it.
 - Apps offer a command to forget your saved logins, for example `/garmin_to_strava forget all`.
 
 ## 4. Try it
@@ -164,6 +166,8 @@ Then send `/ping` to the bot in Telegram.
 | Apply changes to `.env` | `dc up -d`. A plain `restart` keeps the old settings. |
 | Update to the latest code | `git pull && dc up -d --build` |
 | Remove the container | `dc down`. Saved logins in `data/` are kept, and `dc up -d` brings it back. |
+
+The logs never contain your bot token or passwords, so they're safe to share when asking for help.
 
 ### What happens on errors
 - **An error inside one app**, such as Garmin being unreachable, is reported to you in the chat. The bot keeps running.

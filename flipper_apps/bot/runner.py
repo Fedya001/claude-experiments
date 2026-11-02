@@ -112,6 +112,11 @@ class Runner:
         if msg.get("from", {}).get("id") not in self.allowed_users:
             log.warning("ignoring message from %s", msg.get("from"))
             return
+        if msg.get("chat", {}).get("type") != "private":
+            # In groups others would see questions and answers, and bots can't delete
+            # messages there without admin rights, so apps only run in one-to-one chats.
+            log.warning("ignoring message in non-private chat %s", msg["chat"].get("id"))
+            return
         if self._answer_waiting(msg):
             return
         if group := msg.get("media_group_id"):
