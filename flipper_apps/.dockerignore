@@ -1,0 +1,9 @@
+# Only bot/, apps/ and requirements.txt are needed to build the image.
+# Keep secrets and saved logins out of the build context (data/ files are also
+# root-owned and unreadable for the user running the build).
+data/
+.env
+.venv/
+tests/
+**/__pycache__/
+*.gpx

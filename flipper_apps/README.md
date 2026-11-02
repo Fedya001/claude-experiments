@@ -195,6 +195,14 @@ docker builder prune -a    # remove the remaining build cache
 ```
 Then run `dc up -d --build` again.
 
+### Troubleshooting: `permission denied` reading `data/…` during the build
+For example: `no permission to read from … data/garmin_to_strava/users/…/garmin_account.json`. Your copy of the code is from before this was fixed: it sent the `data/` folder to the Docker build, and the saved logins in it are readable only by root. Get the fix and build again:
+```bash
+git pull
+dc up -d --build
+```
+Your saved logins in `data/` stay where they are and keep working.
+
 ## 6. Update
 Your `.env` and `data/` (all saved logins) aren't part of git, so updating never touches them. Run everything inside the `flipper_apps/` folder.
 
