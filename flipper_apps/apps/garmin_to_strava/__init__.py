@@ -8,25 +8,29 @@ from datetime import date, datetime, timedelta
 from bot.app import App, Context
 
 from . import garmin, merge, strava_api
-from .parse import parse_request
+from .parse import SelectorError, parse_request
 
 log = logging.getLogger(__name__)
 
 USAGE = """\
-/garmin_to_strava <selector> | <title> | <description>
+Upload
+  /garmin_to_strava today | Morning ride | Coffee at km 30
+  Which activities: today, yesterday, 2026-10-24, last 2, last ride, rides today
+  Then the title, then the description, separated by |
+  The bot merges them, uploads to Strava and sends the link.
+  Photos: Strava doesn't let apps add them, so add them in the Strava app.
 
-Selector: today, yesterday, 2026-10-24, last 2, rides today, runs yesterday…
-Without '|': first line = selector (or 'today' if it isn't one), next line = title, rest = description.
+Accounts (only ever yours)
+  /garmin_to_strava accounts                    show connected accounts
+  /garmin_to_strava login garmin|strava         log in (again)
+  /garmin_to_strava forget garmin|strava|all    delete saved logins
 
-Example: /garmin_to_strava today | Morning ride to the lake | Coffee stop at km 30
+First time: the bot asks for your Garmin login in the chat and sends
+Strava's official link (Google sign-in works). Passwords are never stored.
+/cancel stops any question.
+/garmin_to_strava help shows this message."""
 
-The first time, the bot asks you to log in to Garmin (in the chat) and to connect
-Strava (with Strava's official link; Google sign-in works). Passwords are never stored,
-only the resulting tokens, separately for each Telegram user.
-Strava doesn't let apps add photos: add them in the Strava app afterwards.
-  /garmin_to_strava accounts                       show your connected accounts
-  /garmin_to_strava connect garmin|strava          log in (again) now
-  /garmin_to_strava forget garmin|strava|all       delete your saved logins"""
+HELP_HINT = "Send /garmin_to_strava help for examples."
 
 SERVICES = {"garmin": garmin, "strava": strava_api}
 SERVICE_NAMES = {"garmin": "Garmin", "strava": "Strava"}
@@ -41,20 +45,26 @@ def fmt_duration(td: timedelta | None) -> str:
 
 class GarminToStrava(App):
     command = "garmin_to_strava"
-    description = "Merge Garmin activities and upload them to Strava"
+    description = "Upload merged Garmin activities to Strava (send /garmin_to_strava help)"
     usage = USAGE
 
     def handle(self, ctx: Context) -> None:
         word, _, rest = ctx.text.strip().partition(" ")
         word, rest = word.lower(), rest.strip().lower()
-        if word == "accounts":
+        if word in ("", "help"):
+            # A bare command shows help instead of uploading by accident.
+            ctx.reply(USAGE)
+        elif word == "accounts":
             self.accounts(ctx)
-        elif word == "connect":
+        elif word in ("login", "connect"):
             self.connect(ctx, rest)
-        elif word == "forget":
+        elif word in ("forget", "logout"):
             self.forget(ctx, rest)
         else:
-            self.run(ctx)
+            try:
+                self.run(ctx)
+            except SelectorError as e:
+                ctx.reply(f"❌ {e}. {HELP_HINT}")
 
     # --- accounts --------------------------------------------------------
     @staticmethod
@@ -78,7 +88,7 @@ class GarminToStrava(App):
     def connect(self, ctx: Context, arg: str) -> None:
         which = self._which(arg, allow_all=False)
         if not which:
-            ctx.reply("Usage: /garmin_to_strava connect garmin|strava")
+            ctx.reply(f"Usage: /garmin_to_strava login garmin|strava\n{HELP_HINT}")
             return
         key = which[0]
         module = SERVICES[key]
@@ -95,7 +105,7 @@ class GarminToStrava(App):
     def forget(self, ctx: Context, arg: str) -> None:
         which = self._which(arg, allow_all=True)
         if not which:
-            ctx.reply("Usage: /garmin_to_strava forget garmin|strava|all")
+            ctx.reply(f"Usage: /garmin_to_strava forget garmin|strava|all\n{HELP_HINT}")
             return
         saved = [k for k in which if SERVICES[k].account_info(ctx.user_dir)]
         if not saved:

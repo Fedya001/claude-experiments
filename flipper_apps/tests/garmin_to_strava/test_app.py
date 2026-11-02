@@ -206,3 +206,30 @@ def test_bad_subcommand_argument_shows_usage(tmp_path):
     ctx = FakeCtx(tmp_path, "forget everything")
     app_mod.APP.handle(ctx)
     assert ctx.messages[-1].startswith("Usage:")
+
+
+@pytest.mark.parametrize("text", ["", "help", "HELP"])
+def test_help_and_bare_command_show_usage_without_uploading(tmp_path, stubs, text):
+    ctx = FakeCtx(tmp_path, text)
+    app_mod.APP.handle(ctx)
+    assert ctx.messages == [app_mod.USAGE]
+    assert FakeStrava.uploads == [] and stubs == {"garmin_connect": 0, "strava_connect": 0}
+    assert "login garmin|strava" in app_mod.USAGE and "forget garmin|strava|all" in app_mod.USAGE
+
+
+def test_login_and_logout_aliases(tmp_path, stubs):
+    ctx = FakeCtx(tmp_path, "login strava")
+    app_mod.APP.handle(ctx)
+    assert stubs["strava_connect"] == 1 and "Strava connected" in ctx.messages[-1]
+    out = FakeCtx(tmp_path, "logout all", answers=["yes"])
+    app_mod.APP.handle(out)
+    assert not (tmp_path / "data/users/1/strava_tokens.json").exists()
+    assert "Forgot your Strava login" in out.messages[-1]
+
+
+def test_bad_selector_points_to_help(tmp_path, stubs):
+    ctx = FakeCtx(tmp_path, "tomorrowish | Title")
+    app_mod.APP.handle(ctx)
+    assert ctx.messages[-1].startswith("❌ unknown word 'tomorrowish'")
+    assert "/garmin_to_strava help" in ctx.messages[-1]
+    assert FakeStrava.uploads == []

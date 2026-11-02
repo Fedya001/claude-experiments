@@ -3,7 +3,9 @@
 Merges the day's Garmin activities into one and uploads it to Strava, with your title and description. It's one of the [flipper_apps](../../README.md); set up the bot there first.
 
 ## Usage
-Send one message:
+Send `/garmin_to_strava help` (or just `/garmin_to_strava`) to see the short help in the chat. A bare command never uploads anything.
+
+To upload, send one message:
 ```
 /garmin_to_strava today | Morning ride to the lake | Coffee stop at km 30
 ```
@@ -44,8 +46,9 @@ Manage your logins with these commands. They only ever show or change **your own
 | Command | What it does |
 |---|---|
 | `/garmin_to_strava accounts` | Shows your connected Garmin and Strava accounts: names, when connected, Strava permissions, and tokens masked like `abcd…wxyz` (never in full) |
-| `/garmin_to_strava connect garmin` | Logs in to Garmin now (again), without uploading anything. Same with `strava`. |
-| `/garmin_to_strava forget garmin` | Deletes your saved Garmin login, after asking you to confirm. Also works with `strava` (this also revokes the bot's access in your Strava account) or `all`. |
+| `/garmin_to_strava login garmin` | Logs in to Garmin now (again), without uploading anything. Same with `strava`. `connect` works too. |
+| `/garmin_to_strava forget garmin` | Deletes your saved Garmin login, after asking you to confirm. Also works with `strava` (this also revokes the bot's access in your Strava account) or `all`. `logout` works too. |
+| `/garmin_to_strava help` | Shows the short help |
 
 **Turn off Garmin → Strava auto-sync** in Garmin Connect. Otherwise each activity is also on Strava separately. The bot lists any overlapping Strava activities so you can delete them in Strava.
 
